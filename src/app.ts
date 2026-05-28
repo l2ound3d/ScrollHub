@@ -162,12 +162,40 @@ function hasConfiguredLibrary(): boolean {
   return !isSmbPath(settings.libraryFolder);
 }
 
+function usesMobileLibrarySetup(): boolean {
+  return isMobile || usesAndroidStorage();
+}
+
+function applyDesktopLibraryUi() {
+  if (usesMobileLibrarySetup()) return;
+  els.librarySourceTabs.hidden = true;
+  els.libraryNetworkPanel.hidden = true;
+
+  const emptySub = document.querySelector(".empty-sub");
+  if (emptySub) {
+    emptySub.textContent = "Click 📂 to choose a library folder, or drag and drop a CBZ file.";
+  }
+}
+
 function updateLibrarySetupUi() {
   const configured = hasConfiguredLibrary();
   const showSetup = showLibrarySetup || !configured;
+  const mobileSetup = usesMobileLibrarySetup();
 
   els.librarySetupPanel.hidden = !showSetup;
   els.libraryChangeBtn.hidden = !configured || showSetup;
+  els.librarySourceTabs.hidden = !mobileSetup;
+
+  if (!mobileSetup) {
+    els.libraryNetworkPanel.hidden = true;
+    els.libraryPickFolderBtn.hidden = !showSetup;
+    if (showSetup) {
+      els.libraryPickFolderBtn.textContent = settings.libraryFolder
+        ? "Change library folder"
+        : "Choose library folder";
+    }
+    return;
+  }
 
   if (librarySource === "network") {
     els.libraryNetworkPanel.hidden = !showSetup;
@@ -239,7 +267,7 @@ function applyMobileUi() {
 
   const drawerHint = document.getElementById("drawer-hint");
   if (drawerHint) {
-    drawerHint.textContent = "ScrollHub v0.1.0-android";
+    drawerHint.textContent = "ScrollHub v0.1.1-android";
   }
 
   const emptySub = document.querySelector(".empty-sub");
@@ -326,17 +354,22 @@ function bindEdgeNav(
   );
 }
 
-function handleEdgeTap(direction: "prev" | "next") {
-  if (currentView !== "reader" || !state.comic || settings.readingMode === "webtoon") return;
-  if (direction === "prev") void goPrev();
-  else void goNext();
-}
-
 function handleEdgeSwipe(direction: "left" | "right") {
   if (currentView !== "reader" || !state.comic || settings.readingMode === "webtoon") return;
-  const rtl = settings.readingDirection === "rtl";
-  if (direction === "left") void (rtl ? goPrev() : goNext());
-  else void (rtl ? goNext() : goPrev());
+  if (direction === "left") void goNext();
+  else void goPrev();
+}
+
+function handleLeftEdgeTap() {
+  if (currentView !== "reader" || !state.comic || settings.readingMode === "webtoon") return;
+  if (settings.readingDirection === "rtl") void goNext();
+  else void goPrev();
+}
+
+function handleRightEdgeTap() {
+  if (currentView !== "reader" || !state.comic || settings.readingMode === "webtoon") return;
+  if (settings.readingDirection === "rtl") void goPrev();
+  else void goNext();
 }
 
 function setReadingActive(active: boolean) {
@@ -400,12 +433,53 @@ function setView(view: View) {
   updatePageTapZones();
 }
 
+function normalizeDoublePageIndex(pageIndex: number): number {
+  if (settings.readingMode !== "double") return pageIndex;
+  if (settings.readingDirection === "rtl") {
+    if (pageIndex <= 0) return 0;
+    if (pageIndex % 2 === 0) return pageIndex - 1;
+    return pageIndex;
+  }
+  if (pageIndex % 2 !== 0) return pageIndex - 1;
+  return pageIndex;
+}
+
+function getDoubleSpreadIndices(pageIndex: number): number[] {
+  if (!state.comic || settings.readingMode !== "double") return [pageIndex];
+  const total = state.comic.pageCount;
+  const normalized = normalizeDoublePageIndex(pageIndex);
+  if (settings.readingDirection === "rtl") {
+    if (normalized === 0) return [0];
+    if (normalized % 2 === 1 && normalized + 1 < total) return [normalized, normalized + 1];
+    return [normalized];
+  }
+  if (normalized % 2 === 0 && normalized + 1 < total) return [normalized, normalized + 1];
+  return [normalized];
+}
+
+function forwardPageStep(): number {
+  if (!state.comic || settings.readingMode !== "double") return 1;
+  if (settings.readingDirection === "rtl") {
+    return state.currentPage === 0 ? 1 : 2;
+  }
+  return state.comic.pageCount - state.currentPage > 1 ? 2 : 1;
+}
+
+function backwardPageStep(): number {
+  if (!state.comic || settings.readingMode !== "double") return 1;
+  if (settings.readingDirection === "rtl") {
+    return state.currentPage <= 1 ? 1 : 2;
+  }
+  return state.currentPage <= 1 ? 1 : 2;
+}
+
 function formatPageLabel(pageIndex: number): string {
   if (!state.comic) return "";
   const total = state.comic.pageCount;
-  const displayPage = pageIndex + 1;
-  if (settings.readingMode === "double" && pageIndex + 1 < total) {
-    return `${displayPage}-${displayPage + 1} / ${total}`;
+  const indices = getDoubleSpreadIndices(pageIndex);
+  const displayPage = indices[0] + 1;
+  if (settings.readingMode === "double" && indices.length === 2) {
+    return `${displayPage}-${indices[1] + 1} / ${total}`;
   }
   return `${displayPage} / ${total}`;
 }
@@ -503,12 +577,19 @@ async function renderPaginatedPage() {
   els.pageContainer.classList.add("loading");
 
   try {
-    const indices =
-      settings.readingMode === "double" && state.currentPage + 1 < state.comic.pageCount
-        ? [state.currentPage, state.currentPage + 1]
-        : [state.currentPage];
+    state.currentPage = normalizeDoublePageIndex(state.currentPage);
+    const indices = getDoubleSpreadIndices(state.currentPage);
+    const displayOrder =
+      settings.readingDirection === "rtl" && indices.length === 2
+        ? [indices[1], indices[0]]
+        : indices;
 
-    const pages = await Promise.all(indices.map((index) => getPage(state.comic!.path, index)));
+    const pages = await Promise.all(displayOrder.map((index) => getPage(state.comic!.path, index)));
+
+    els.pageContainer.classList.toggle(
+      "rtl-spread-single",
+      settings.readingDirection === "rtl" && indices.length === 1,
+    );
 
     els.pageContainer.innerHTML = pages
       .map(
@@ -670,6 +751,7 @@ async function openComic(path: string, options?: { silent?: boolean }) {
     if (state.currentPage >= meta.pageCount) {
       state.currentPage = Math.max(0, meta.pageCount - 1);
     }
+    state.currentPage = normalizeDoublePageIndex(state.currentPage);
     settings.lastReadPath = path;
     await saveSettings(settings);
     closeDrawer();
@@ -703,6 +785,10 @@ async function restoreLastSession(): Promise<boolean> {
 
 function openLibrary() {
   closeDrawer();
+  if (!usesMobileLibrarySetup() && !hasConfiguredLibrary()) {
+    void pickLibraryFolder();
+    return;
+  }
   if (hasConfiguredLibrary()) {
     showLibrarySetup = false;
     librarySource = inferLibrarySource();
@@ -973,6 +1059,10 @@ function isLibraryRoot(path: string): boolean {
 }
 
 function beginLibrarySetupChange() {
+  if (!usesMobileLibrarySetup()) {
+    void pickLibraryFolder();
+    return;
+  }
   showLibrarySetup = true;
   updateLibrarySetupUi();
   if (librarySource === "network" && !networkConnected) {
@@ -1102,9 +1192,9 @@ async function refreshLibrary() {
     libraryCurrentPath = null;
     els.libraryList.innerHTML = "";
     els.libraryEmpty.hidden = false;
-    els.libraryEmpty.textContent = usesAndroidStorage()
+    els.libraryEmpty.textContent = usesMobileLibrarySetup()
       ? "Pick a folder on this device, or use the Network tab for your NAS."
-      : "No folder selected. Use Menu → Open Library Folder or set one in Settings.";
+      : "No folder selected. Click Choose library folder or set one in Settings.";
     renderLibraryBreadcrumb();
     return;
   }
@@ -1153,14 +1243,6 @@ function escapeHtml(value: string): string {
     .replace(/"/g, "&quot;");
 }
 
-function pageStep(): number {
-  if (settings.readingMode === "double") {
-    const remaining = state.comic ? state.comic.pageCount - state.currentPage : 1;
-    return remaining > 1 ? 2 : 1;
-  }
-  return 1;
-}
-
 async function goNext() {
   if (!state.comic || state.loading) return;
 
@@ -1173,10 +1255,8 @@ async function goNext() {
     return;
   }
 
-  const step = pageStep();
-  const next = settings.readingDirection === "rtl"
-    ? state.currentPage - step
-    : state.currentPage + step;
+  const step = forwardPageStep();
+  const next = state.currentPage + step;
 
   if (next >= 0 && next < state.comic.pageCount) {
     state.currentPage = next;
@@ -1196,10 +1276,8 @@ async function goPrev() {
     return;
   }
 
-  const step = pageStep();
-  const prev = settings.readingDirection === "rtl"
-    ? state.currentPage + step
-    : state.currentPage - step;
+  const step = backwardPageStep();
+  const prev = state.currentPage - step;
 
   if (prev >= 0 && prev < state.comic.pageCount) {
     state.currentPage = prev;
@@ -1228,6 +1306,7 @@ async function applySettingsFromForm() {
   }
   libraryCurrentPath = settings.libraryFolder;
   if (state.comic) {
+    state.currentPage = normalizeDoublePageIndex(state.currentPage);
     await renderReader();
   }
 }
@@ -1255,8 +1334,8 @@ function bindEvents() {
   els.prevPageBtn.addEventListener("click", () => void goPrev());
   els.nextPageBtn.addEventListener("click", () => void goNext());
 
-  bindEdgeNav(els.pageZonePrev, () => handleEdgeTap("prev"), handleEdgeSwipe);
-  bindEdgeNav(els.pageZoneNext, () => handleEdgeTap("next"), handleEdgeSwipe);
+  bindEdgeNav(els.pageZonePrev, handleLeftEdgeTap, handleEdgeSwipe);
+  bindEdgeNav(els.pageZoneNext, handleRightEdgeTap, handleEdgeSwipe);
 
   els.pageContainer.addEventListener("click", (event) => {
     if (!isMobile || !chromeHidden || !state.comic || settings.readingMode === "webtoon") return;
@@ -1381,19 +1460,17 @@ function bindEvents() {
 
   els.pageSlider.addEventListener("input", () => {
     if (!state.comic || state.loading) return;
-    const page = Number(els.pageSlider.value);
-    if (settings.readingMode === "double" && page % 2 === 1 && page > 0) {
-      els.pageSlider.value = String(page - 1);
-    }
-    const nextPage = Number(els.pageSlider.value);
-    if (nextPage !== state.currentPage) {
-      els.pageInfoBtn.textContent = formatPageLabel(nextPage);
+    const page = normalizeDoublePageIndex(Number(els.pageSlider.value));
+    els.pageSlider.value = String(page);
+    if (page !== state.currentPage) {
+      els.pageInfoBtn.textContent = formatPageLabel(page);
     }
   });
 
   els.pageSlider.addEventListener("change", () => {
     if (!state.comic || state.loading) return;
-    const page = Number(els.pageSlider.value);
+    const page = normalizeDoublePageIndex(Number(els.pageSlider.value));
+    els.pageSlider.value = String(page);
     if (page === state.currentPage) return;
     state.currentPage = page;
     if (settings.readingMode === "webtoon") {
@@ -1461,12 +1538,13 @@ function bindEvents() {
     if (currentView !== "reader" || !state.comic) return;
     if (settings.readingMode === "webtoon") return;
 
+    const rtl = settings.readingDirection === "rtl";
     if (event.key === "ArrowRight" || event.key === "PageDown") {
       event.preventDefault();
-      void goNext();
+      void (rtl ? goPrev() : goNext());
     } else if (event.key === "ArrowLeft" || event.key === "PageUp") {
       event.preventDefault();
-      void goPrev();
+      void (rtl ? goNext() : goPrev());
     } else if (event.key === "Home") {
       event.preventDefault();
       state.currentPage = 0;
@@ -1521,6 +1599,7 @@ export async function initApp() {
   document.getElementById("library-nav-btn")?.removeAttribute("hidden");
   document.querySelector('.nav-btn[data-view="library"]')?.removeAttribute("hidden");
   applyMobileUi();
+  applyDesktopLibraryUi();
 
   settings = await getSettings();
   if (!["single", "double", "webtoon"].includes(settings.readingMode)) {

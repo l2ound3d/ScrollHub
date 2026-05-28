@@ -419,6 +419,14 @@ body[data-reading-mode="double"] .page-container {
   gap: 0;
 }
 
+body[data-direction="rtl"][data-reading-mode="double"] .page-container.rtl-spread-single {
+  justify-content: flex-end;
+}
+
+body[data-direction="rtl"][data-reading-mode="single"] .page-container {
+  justify-content: flex-end;
+}
+
 body[data-reading-mode="double"] .page-image.fit-width {
   width: 50%;
   max-width: 50%;

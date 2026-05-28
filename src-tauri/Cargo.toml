@@ -1,6 +1,6 @@
 [package]
 name = "scrollhub"
-version = "0.1.0"
+version = "0.1.1"
 description = "ScrollHub — a lightweight CBZ comic reader"
 authors = ["you"]
 edition = "2021"
