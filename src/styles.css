@@ -386,6 +386,29 @@ body.reading-active.chrome-hidden .page-container {
   -webkit-tap-highlight-color: transparent;
 }
 
+.mobile-top-tap-strip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: calc(56px + env(safe-area-inset-top, 0px));
+  z-index: 12;
+  background: transparent;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-top-tap-strip[hidden] {
+  display: none !important;
+}
+
+body:not([data-platform="mobile"]) .mobile-top-tap-strip {
+  display: none !important;
+}
+
+body[data-platform="mobile"] .page-image {
+  touch-action: pinch-zoom;
+}
+
 .page-image.fit-width {
   width: 100%;
   height: auto;
@@ -685,9 +708,52 @@ body.network-loading::after {
     max-width: 120px;
   }
 
-  body[data-reading-mode="double"] .page-image.fit-width {
+  body[data-reading-mode="double"]:not([data-platform="mobile"]) .page-image.fit-width {
     width: 100%;
   }
+}
+
+@media (orientation: landscape) {
+  body[data-platform="mobile"][data-reading-mode="double"] .page-container {
+    align-items: stretch;
+    justify-content: center;
+    gap: 0;
+    padding: 0;
+  }
+
+  body[data-platform="mobile"][data-reading-mode="double"] .page-image.fit-width,
+  body[data-platform="mobile"][data-reading-mode="double"] .page-image.fit-height {
+    flex: 0 0 50%;
+    width: 50%;
+    max-width: 50%;
+    margin: 0;
+    padding: 0;
+    border-radius: 0;
+    max-height: calc(100vh - var(--safe-top, 0px) - var(--safe-bottom, 0px));
+  }
+
+  body.reading-active.chrome-hidden[data-platform="mobile"][data-reading-mode="double"] .page-image.fit-width,
+  body.reading-active.chrome-hidden[data-platform="mobile"][data-reading-mode="double"] .page-image.fit-height {
+    max-height: calc(100vh - var(--safe-top, 0px) - var(--safe-bottom, 0px));
+  }
+
+  body[data-platform="mobile"][data-reading-mode="double"] .page-image:first-child:not(:only-child) {
+    object-position: right center;
+  }
+
+  body[data-platform="mobile"][data-reading-mode="double"] .page-image:last-child:not(:only-child) {
+    object-position: left center;
+  }
+}
+
+body[data-platform="mobile"][data-reading-mode="double"] .page-container {
+  gap: 0;
+}
+
+body[data-platform="mobile"][data-reading-mode="double"] .page-image {
+  margin: 0;
+  padding: 0;
+  border-radius: 0;
 }
 
 body[data-platform="mobile"] {

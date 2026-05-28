@@ -78,8 +78,7 @@ const els = {
   settingsView: document.getElementById("settings-view")!,
   pageContainer: document.getElementById("page-container")!,
   pageTapZones: document.getElementById("page-tap-zones")!,
-  pageZonePrev: document.getElementById("page-zone-prev") as HTMLButtonElement,
-  pageZoneNext: document.getElementById("page-zone-next") as HTMLButtonElement,
+  mobileTopTapStrip: document.getElementById("mobile-top-tap-strip")!,
   pageInfoWrap: document.getElementById("page-info-wrap")!,
   pageInfoBtn: document.getElementById("page-info-btn") as HTMLButtonElement,
   pageJumpInput: document.getElementById("page-jump-input") as HTMLInputElement,
@@ -267,12 +266,12 @@ function applyMobileUi() {
 
   const drawerHint = document.getElementById("drawer-hint");
   if (drawerHint) {
-    drawerHint.textContent = "ScrollHub v0.1.1-android";
+    drawerHint.textContent = "ScrollHub v0.1.2-android";
   }
 
   const emptySub = document.querySelector(".empty-sub");
   if (emptySub) {
-    emptySub.textContent = "Tap 📂 in the toolbar or Menu → Library";
+    emptySub.textContent = "Tap the top edge for menu, screen sides to turn pages";
   }
 }
 
@@ -291,73 +290,165 @@ function applyReadingMode() {
 }
 
 function updatePageTapZones() {
+  els.pageTapZones.hidden = true;
+  els.pageTapZones.setAttribute("aria-hidden", "true");
+  updateMobileTopTapStrip();
+}
+
+const MOBILE_EDGE_FRACTION = 0.14;
+const MOBILE_TAP_SLOP_PX = 24;
+const MOBILE_PINCH_COOLDOWN_MS = 500;
+
+type MobileTapZone = "left" | "right" | "none";
+
+let mobileTouchActive = false;
+let mobileTouchStartX = 0;
+let mobileTouchStartY = 0;
+let mobileTouchZone: MobileTapZone = "none";
+let mobilePinchGesture = false;
+let mobilePinchCooldownUntil = 0;
+
+function isMobileReaderTouchTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return !target.closest(".mobile-top-tap-strip, .chrome, .drawer, .drawer-backdrop");
+}
+
+function mobileSideTapZone(x: number): MobileTapZone {
+  const edge = window.innerWidth * MOBILE_EDGE_FRACTION;
+  if (x < edge) return "left";
+  if (x > window.innerWidth - edge) return "right";
+  return "none";
+}
+
+function blockMobileNavAfterPinch() {
+  mobilePinchCooldownUntil = Date.now() + MOBILE_PINCH_COOLDOWN_MS;
+}
+
+function canNavigateByMobileTouch(): boolean {
+  return Date.now() >= mobilePinchCooldownUntil;
+}
+
+function resetMobileTouchState() {
+  mobileTouchActive = false;
+  mobilePinchGesture = false;
+  mobileTouchZone = "none";
+}
+
+function updateMobileTopTapStrip() {
   const show =
     isMobile &&
+    chromeHidden &&
     state.comic !== null &&
     currentView === "reader" &&
     settings.readingMode !== "webtoon";
-  els.pageTapZones.hidden = !show;
-  els.pageTapZones.setAttribute("aria-hidden", show ? "false" : "true");
+  els.mobileTopTapStrip.hidden = !show;
+  els.mobileTopTapStrip.setAttribute("aria-hidden", show ? "false" : "true");
 }
 
-const EDGE_SWIPE_MIN = 48;
-
-function bindEdgeNav(
-  element: HTMLElement,
-  onTap: () => void,
-  onSwipe: (direction: "left" | "right") => void,
-) {
-  let startX = 0;
-  let multiTouch = false;
-  let suppressClick = false;
-
-  element.addEventListener("click", (event) => {
-    if (suppressClick) {
-      suppressClick = false;
-      event.preventDefault();
+function bindMobileReaderGestures() {
+  const onTouchStart = (event: TouchEvent) => {
+    if (!isMobile || currentView !== "reader" || !state.comic || settings.readingMode === "webtoon") {
       return;
     }
-    onTap();
-  });
+    if (!isMobileReaderTouchTarget(event.target)) return;
 
-  element.addEventListener(
+    if (event.touches.length > 1) {
+      mobilePinchGesture = true;
+      mobileTouchActive = false;
+      blockMobileNavAfterPinch();
+      return;
+    }
+
+    if (mobilePinchGesture) return;
+
+    const touch = event.touches[0];
+    if (!touch) return;
+
+    mobileTouchActive = true;
+    mobileTouchStartX = touch.clientX;
+    mobileTouchStartY = touch.clientY;
+    mobileTouchZone = mobileSideTapZone(touch.clientX);
+  };
+
+  const onTouchMove = (event: TouchEvent) => {
+    if (!isMobile || !isMobileReaderTouchTarget(event.target)) return;
+    if (event.touches.length > 1) {
+      mobilePinchGesture = true;
+      mobileTouchActive = false;
+      blockMobileNavAfterPinch();
+    }
+  };
+
+  const onTouchEnd = (event: TouchEvent) => {
+    if (!isMobile || currentView !== "reader" || !state.comic || settings.readingMode === "webtoon") {
+      resetMobileTouchState();
+      return;
+    }
+
+    if (event.touches.length > 0) {
+      return;
+    }
+
+    if (mobilePinchGesture) {
+      mobilePinchGesture = false;
+      mobileTouchActive = false;
+      blockMobileNavAfterPinch();
+      return;
+    }
+
+    if (!mobileTouchActive || !canNavigateByMobileTouch()) {
+      resetMobileTouchState();
+      return;
+    }
+
+    const zone = mobileTouchZone;
+    const startX = mobileTouchStartX;
+    const startY = mobileTouchStartY;
+    resetMobileTouchState();
+
+    const touch = event.changedTouches[0];
+    if (!touch || !isMobileReaderTouchTarget(touch.target)) return;
+
+    const dx = touch.clientX - startX;
+    const dy = touch.clientY - startY;
+    if (Math.hypot(dx, dy) > MOBILE_TAP_SLOP_PX) return;
+
+    if (zone === "left") {
+      handleLeftEdgeTap();
+    } else if (zone === "right") {
+      handleRightEdgeTap();
+    }
+  };
+
+  const onTouchCancel = () => {
+    resetMobileTouchState();
+  };
+
+  els.readerView.addEventListener("touchstart", onTouchStart, { passive: true });
+  els.readerView.addEventListener("touchmove", onTouchMove, { passive: true });
+  els.readerView.addEventListener("touchend", onTouchEnd, { passive: true });
+  els.readerView.addEventListener("touchcancel", onTouchCancel, { passive: true });
+
+  let topStripTouchStartY = 0;
+  els.mobileTopTapStrip.addEventListener(
     "touchstart",
     (event) => {
-      multiTouch = event.touches.length > 1;
-      startX = event.touches[0]?.clientX ?? 0;
+      topStripTouchStartY = event.touches[0]?.clientY ?? 0;
     },
     { passive: true },
   );
-
-  element.addEventListener(
-    "touchmove",
-    (event) => {
-      if (event.touches.length > 1) multiTouch = true;
-    },
-    { passive: true },
-  );
-
-  element.addEventListener(
+  els.mobileTopTapStrip.addEventListener(
     "touchend",
     (event) => {
-      if (multiTouch || event.changedTouches.length !== 1) {
-        multiTouch = false;
-        return;
-      }
-      const endX = event.changedTouches[0]?.clientX ?? 0;
-      const delta = endX - startX;
-      if (Math.abs(delta) < EDGE_SWIPE_MIN) return;
-      suppressClick = true;
-      onSwipe(delta < 0 ? "left" : "right");
+      if (event.touches.length > 0) return;
+      const touch = event.changedTouches[0];
+      if (!touch) return;
+      const dy = touch.clientY - topStripTouchStartY;
+      if (Math.abs(dy) > MOBILE_TAP_SLOP_PX) return;
+      setChromeHidden(false);
     },
     { passive: true },
   );
-}
-
-function handleEdgeSwipe(direction: "left" | "right") {
-  if (currentView !== "reader" || !state.comic || settings.readingMode === "webtoon") return;
-  if (direction === "left") void goNext();
-  else void goPrev();
 }
 
 function handleLeftEdgeTap() {
@@ -381,6 +472,10 @@ function setChromeHidden(hidden: boolean) {
   document.body.classList.toggle("chrome-hidden", hidden);
   els.chromeToggle.textContent = hidden ? "▾" : "▴";
   els.chromeToggle.title = hidden ? "Show UI (H)" : "Hide UI (H)";
+  if (hidden) {
+    document.body.classList.remove("chrome-reveal");
+  }
+  updateMobileTopTapStrip();
 }
 
 function revealChromeBriefly() {
@@ -1334,60 +1429,7 @@ function bindEvents() {
   els.prevPageBtn.addEventListener("click", () => void goPrev());
   els.nextPageBtn.addEventListener("click", () => void goNext());
 
-  bindEdgeNav(els.pageZonePrev, handleLeftEdgeTap, handleEdgeSwipe);
-  bindEdgeNav(els.pageZoneNext, handleRightEdgeTap, handleEdgeSwipe);
-
-  els.pageContainer.addEventListener("click", (event) => {
-    if (!isMobile || !chromeHidden || !state.comic || settings.readingMode === "webtoon") return;
-    const target = event.target as HTMLElement;
-    if (!target.closest(".page-image")) return;
-    const x = (event as MouseEvent).clientX;
-    const edge = window.innerWidth * 0.22;
-    if (x >= edge && x <= window.innerWidth - edge) revealChromeBriefly();
-  });
-
-  let centerTouchStart: { x: number; y: number; multi: boolean } | null = null;
-  els.pageContainer.addEventListener(
-    "touchstart",
-    (event) => {
-      if (!isMobile || !state.comic || settings.readingMode === "webtoon") return;
-      centerTouchStart = {
-        x: event.touches[0]?.clientX ?? 0,
-        y: event.touches[0]?.clientY ?? 0,
-        multi: event.touches.length > 1,
-      };
-    },
-    { passive: true },
-  );
-  els.pageContainer.addEventListener(
-    "touchmove",
-    (event) => {
-      if (centerTouchStart && event.touches.length > 1) centerTouchStart.multi = true;
-    },
-    { passive: true },
-  );
-  els.pageContainer.addEventListener(
-    "touchend",
-    (event) => {
-      if (!centerTouchStart || !isMobile || !chromeHidden || !state.comic) {
-        centerTouchStart = null;
-        return;
-      }
-      if (centerTouchStart.multi || event.changedTouches.length !== 1) {
-        centerTouchStart = null;
-        return;
-      }
-      const x = event.changedTouches[0]?.clientX ?? 0;
-      const y = event.changedTouches[0]?.clientY ?? 0;
-      const dx = x - centerTouchStart.x;
-      const dy = y - centerTouchStart.y;
-      centerTouchStart = null;
-      if (Math.hypot(dx, dy) > 16) return;
-      const edge = window.innerWidth * 0.22;
-      if (x >= edge && x <= window.innerWidth - edge) revealChromeBriefly();
-    },
-    { passive: true },
-  );
+  bindMobileReaderGestures();
 
   els.chromeToggle.addEventListener("click", toggleChrome);
 
