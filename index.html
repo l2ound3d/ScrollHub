@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="stylesheet" href="/src/styles.css" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>ScrollHub</title>
     <script type="module" src="/src/main.ts" defer></script>
   </head>
@@ -38,7 +38,7 @@
           </div>
         </div>
         <div class="chrome-actions">
-          <button id="open-file-btn" class="icon-btn" type="button" title="Open CBZ">📂</button>
+          <button id="open-library-btn" class="icon-btn" type="button" title="Library" aria-label="Open library">📂</button>
           <button id="prev-page-btn" class="icon-btn" type="button" title="Previous page">‹</button>
           <button id="next-page-btn" class="icon-btn" type="button" title="Next page">›</button>
           <button id="chrome-toggle" class="icon-btn" type="button" title="Hide UI (H)">▴</button>
@@ -53,20 +53,21 @@
         </div>
         <nav class="drawer-nav">
           <button class="nav-btn active" data-view="reader" type="button">Reader</button>
-          <button class="nav-btn" data-view="library" type="button">Library</button>
+          <button id="library-nav-btn" class="nav-btn" data-view="library" type="button">Library</button>
           <button class="nav-btn" data-view="settings" type="button">Settings</button>
         </nav>
-        <div class="drawer-actions">
-          <button id="open-folder-btn" class="secondary-btn" type="button">Open Folder</button>
-        </div>
-        <p class="drawer-hint">H hide UI · M menu · ← → pages</p>
+        <p id="drawer-hint" class="drawer-hint">ScrollHub v0.1.0</p>
       </aside>
 
       <main class="content">
         <section id="reader-view" class="view-panel">
           <div id="empty-state" class="empty-state">
             <p class="empty-title">Open a comic</p>
-            <p class="empty-sub">Use the folder button or drag a .cbz here</p>
+            <p class="empty-sub">Tap 📂 in the toolbar or Menu → Library</p>
+          </div>
+          <div id="page-tap-zones" class="page-tap-zones" hidden aria-hidden="true">
+            <button type="button" id="page-zone-prev" class="page-tap-zone page-tap-prev" aria-label="Previous page"></button>
+            <button type="button" id="page-zone-next" class="page-tap-zone page-tap-next" aria-label="Next page"></button>
           </div>
           <div id="page-container" class="page-container"></div>
         </section>
@@ -76,9 +77,36 @@
             <h3>Library</h3>
             <div id="library-breadcrumb" class="library-breadcrumb"></div>
           </div>
+          <div id="library-setup-panel" class="library-setup-panel" hidden>
+            <div id="library-source-tabs" class="library-source-tabs">
+              <button type="button" class="source-tab active" data-source="local">Phone</button>
+              <button type="button" class="source-tab" data-source="network">Network</button>
+            </div>
+            <div id="library-network-panel" class="library-network-panel" hidden>
+              <label class="network-field">
+                Server
+                <input id="network-host" type="text" inputmode="url" autocomplete="off" placeholder="192.168.1.50 or nas.local" />
+              </label>
+              <label class="network-field">
+                Username
+                <input id="network-username" type="text" autocomplete="username" placeholder="Optional for guest access" />
+              </label>
+              <label class="network-field">
+                Password
+                <input id="network-password" type="password" autocomplete="current-password" placeholder="Optional" />
+              </label>
+              <button id="network-connect-btn" class="secondary-btn network-connect-btn" type="button">Connect</button>
+            </div>
+            <button id="library-pick-folder-btn" class="secondary-btn library-pick-btn" type="button" hidden>
+              Choose library folder
+            </button>
+          </div>
           <p id="library-empty" class="inline-empty" hidden>
             No folders found here.
           </p>
+          <button id="library-change-btn" class="secondary-btn library-change-btn" type="button" hidden>
+            Change library location
+          </button>
           <div id="library-list" class="library-list"></div>
         </section>
 

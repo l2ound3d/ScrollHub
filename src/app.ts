@@ -1,15 +1,17 @@
 import { open } from "@tauri-apps/plugin-dialog";
-import { type as osType } from "@tauri-apps/plugin-os";
 import {
   getPage,
   getProgress,
   getSettings,
   listLibraryDirectory,
   openCbz,
+  pickAndroidLibraryFolder,
+  smbConnect,
   saveProgress,
   saveSettings,
+  getPlatform,
 } from "./api";
-import type { AppSettings, ComicMeta, LibraryEntry, View } from "./types";
+import type { AppSettings, ComicMeta, LibraryEntry, LibrarySource, View } from "./types";
 
 type FitMode = AppSettings["fitMode"];
 type ReadingMode = AppSettings["readingMode"];
@@ -43,8 +45,14 @@ let settings: AppSettings = {
   readingMode: "single",
   fitMode: "width",
   libraryFolder: null,
+  librarySource: null,
+  networkHost: null,
+  networkUsername: null,
+  networkPassword: null,
+  lastReadPath: null,
 };
 
+let libraryNavStack: { name: string; path: string }[] = [];
 let libraryItems: LibraryEntry[] = [];
 let libraryCurrentPath: string | null = null;
 let currentView: View = "reader";
@@ -52,6 +60,13 @@ let chromeHidden = false;
 let drawerOpen = false;
 let chromeRevealTimer: ReturnType<typeof setTimeout> | null = null;
 let isMobile = false;
+let isAndroid = false;
+let librarySource: LibrarySource = "local";
+let networkConnected = false;
+let networkConnecting = false;
+let networkShareList: LibraryEntry[] = [];
+let showLibrarySetup = false;
+let appPlatform = "desktop";
 
 const els = {
   app: document.getElementById("app")!,
@@ -62,6 +77,9 @@ const els = {
   libraryView: document.getElementById("library-view")!,
   settingsView: document.getElementById("settings-view")!,
   pageContainer: document.getElementById("page-container")!,
+  pageTapZones: document.getElementById("page-tap-zones")!,
+  pageZonePrev: document.getElementById("page-zone-prev") as HTMLButtonElement,
+  pageZoneNext: document.getElementById("page-zone-next") as HTMLButtonElement,
   pageInfoWrap: document.getElementById("page-info-wrap")!,
   pageInfoBtn: document.getElementById("page-info-btn") as HTMLButtonElement,
   pageJumpInput: document.getElementById("page-jump-input") as HTMLInputElement,
@@ -69,6 +87,15 @@ const els = {
   libraryList: document.getElementById("library-list")!,
   libraryEmpty: document.getElementById("library-empty")!,
   libraryBreadcrumb: document.getElementById("library-breadcrumb")!,
+  libraryPickFolderBtn: document.getElementById("library-pick-folder-btn") as HTMLButtonElement,
+  librarySetupPanel: document.getElementById("library-setup-panel")!,
+  librarySourceTabs: document.getElementById("library-source-tabs")!,
+  libraryNetworkPanel: document.getElementById("library-network-panel")!,
+  networkHostInput: document.getElementById("network-host") as HTMLInputElement,
+  networkUsernameInput: document.getElementById("network-username") as HTMLInputElement,
+  networkPasswordInput: document.getElementById("network-password") as HTMLInputElement,
+  networkConnectBtn: document.getElementById("network-connect-btn") as HTMLButtonElement,
+  libraryChangeBtn: document.getElementById("library-change-btn") as HTMLButtonElement,
   pageSlider: document.getElementById("page-slider") as HTMLInputElement,
   settingsForm: document.getElementById("settings-form") as HTMLFormElement,
   themeSelect: document.getElementById("theme-select") as HTMLSelectElement,
@@ -81,27 +108,143 @@ const els = {
   nextPageBtn: document.getElementById("next-page-btn") as HTMLButtonElement,
 };
 
+function isContentUri(path: string): boolean {
+  return path.startsWith("content://");
+}
+
+function isSmbPath(path: string): boolean {
+  return path.startsWith("smb://");
+}
+
+function isNetworkShareRoot(path: string): boolean {
+  if (!isSmbPath(path)) return false;
+  const rest = path.slice("smb://".length);
+  const parts = rest.split("/").filter(Boolean);
+  return parts.length === 2;
+}
+
+function normalizeSmbPath(path: string): string {
+  return path.replace(/\\/g, "/").replace(/\/+$/, "");
+}
+
+function smbParentDirectory(filePath: string): string {
+  const normalized = filePath.replace(/\\/g, "/");
+  const lastSlash = normalized.lastIndexOf("/");
+  if (lastSlash <= "smb://".length) return normalized;
+  return normalized.slice(0, lastSlash);
+}
+
+function buildSmbNavStackFromPath(targetPath: string): { name: string; path: string }[] {
+  const rest = targetPath.slice("smb://".length);
+  const parts = rest.split("/").filter(Boolean);
+  if (parts.length === 0) return [];
+
+  const stack: { name: string; path: string }[] = [];
+  let built = `smb://${parts[0]}`;
+  stack.push({ name: parts[0], path: `${built}/` });
+
+  for (let i = 1; i < parts.length; i++) {
+    built += `/${parts[i]}`;
+    stack.push({ name: parts[i], path: built });
+  }
+  return stack;
+}
+
+function inferLibrarySource(): LibrarySource {
+  if (settings.librarySource) return settings.librarySource;
+  if (settings.libraryFolder && isSmbPath(settings.libraryFolder)) return "network";
+  return "local";
+}
+
+function hasConfiguredLibrary(): boolean {
+  if (!settings.libraryFolder) return false;
+  if (librarySource === "network") return isSmbPath(settings.libraryFolder);
+  return !isSmbPath(settings.libraryFolder);
+}
+
+function updateLibrarySetupUi() {
+  const configured = hasConfiguredLibrary();
+  const showSetup = showLibrarySetup || !configured;
+
+  els.librarySetupPanel.hidden = !showSetup;
+  els.libraryChangeBtn.hidden = !configured || showSetup;
+
+  if (librarySource === "network") {
+    els.libraryNetworkPanel.hidden = !showSetup;
+    els.libraryPickFolderBtn.hidden = true;
+  } else {
+    els.libraryNetworkPanel.hidden = true;
+    els.libraryPickFolderBtn.hidden = !showSetup || !usesAndroidStorage();
+    if (showSetup && usesAndroidStorage()) {
+      els.libraryPickFolderBtn.textContent = settings.libraryFolder
+        ? "Change library folder"
+        : "Choose library folder";
+    }
+  }
+}
+
+async function ensureNetworkConnected(): Promise<boolean> {
+  if (networkConnected) return true;
+  if (!settings.networkHost) return false;
+
+  try {
+    const shares = await smbConnect(
+      settings.networkHost,
+      settings.networkUsername ?? "",
+      settings.networkPassword ?? "",
+    );
+    networkConnected = true;
+    networkShareList = shares;
+    return true;
+  } catch {
+    networkConnected = false;
+    return false;
+  }
+}
+
+async function saveNetworkLibraryFolder(dirPath: string) {
+  const normalized = normalizeSmbPath(dirPath);
+  if (settings.libraryFolder === normalized) return;
+
+  settings.libraryFolder = normalized;
+  settings.librarySource = "network";
+  librarySource = "network";
+  libraryCurrentPath = normalized;
+  libraryNavStack = buildSmbNavStackFromPath(normalized);
+  LIBRARY_CACHE.clear();
+  showLibrarySetup = false;
+  await saveSettings(settings);
+  updateLibrarySetupUi();
+}
+
+function showAppMessage(message: string) {
+  window.alert(message);
+}
+
+function usesAndroidStorage(): boolean {
+  return isAndroid || appPlatform === "android";
+}
+
 function applyMobileUi() {
   if (!isMobile) return;
 
   document.body.dataset.platform = "mobile";
-  document.getElementById("open-folder-btn")?.setAttribute("hidden", "");
-  document.querySelector('.nav-btn[data-view="library"]')?.setAttribute("hidden", "");
-  document.getElementById("library-folder")?.closest("label")?.setAttribute("hidden", "");
-  document.querySelector(".drawer-hint")!.textContent = "Tap edges to turn pages · Menu for settings";
+
+  document.getElementById("library-nav-btn")?.removeAttribute("hidden");
+  document.querySelector('.nav-btn[data-view="library"]')?.removeAttribute("hidden");
+
+  if (usesAndroidStorage()) {
+    document.getElementById("library-folder")?.closest("label")?.setAttribute("hidden", "");
+  }
+
+  const drawerHint = document.getElementById("drawer-hint");
+  if (drawerHint) {
+    drawerHint.textContent = "ScrollHub v0.1.0-android";
+  }
 
   const emptySub = document.querySelector(".empty-sub");
   if (emptySub) {
-    emptySub.textContent = "Tap the folder icon to open a .cbz file";
-  }
-}
-
-function detectMobilePlatform(): boolean {
-  try {
-    const platform = osType();
-    return platform === "android" || platform === "ios";
-  } catch {
-    return /Android|iPhone|iPad/i.test(navigator.userAgent);
+    emptySub.textContent = "Tap 📂 in the toolbar or Menu → Library";
   }
 }
 
@@ -116,6 +259,84 @@ function applyReadingMode() {
   const isWebtoon = settings.readingMode === "webtoon";
   els.prevPageBtn.hidden = isWebtoon;
   els.nextPageBtn.hidden = isWebtoon;
+  updatePageTapZones();
+}
+
+function updatePageTapZones() {
+  const show =
+    isMobile &&
+    state.comic !== null &&
+    currentView === "reader" &&
+    settings.readingMode !== "webtoon";
+  els.pageTapZones.hidden = !show;
+  els.pageTapZones.setAttribute("aria-hidden", show ? "false" : "true");
+}
+
+const EDGE_SWIPE_MIN = 48;
+
+function bindEdgeNav(
+  element: HTMLElement,
+  onTap: () => void,
+  onSwipe: (direction: "left" | "right") => void,
+) {
+  let startX = 0;
+  let multiTouch = false;
+  let suppressClick = false;
+
+  element.addEventListener("click", (event) => {
+    if (suppressClick) {
+      suppressClick = false;
+      event.preventDefault();
+      return;
+    }
+    onTap();
+  });
+
+  element.addEventListener(
+    "touchstart",
+    (event) => {
+      multiTouch = event.touches.length > 1;
+      startX = event.touches[0]?.clientX ?? 0;
+    },
+    { passive: true },
+  );
+
+  element.addEventListener(
+    "touchmove",
+    (event) => {
+      if (event.touches.length > 1) multiTouch = true;
+    },
+    { passive: true },
+  );
+
+  element.addEventListener(
+    "touchend",
+    (event) => {
+      if (multiTouch || event.changedTouches.length !== 1) {
+        multiTouch = false;
+        return;
+      }
+      const endX = event.changedTouches[0]?.clientX ?? 0;
+      const delta = endX - startX;
+      if (Math.abs(delta) < EDGE_SWIPE_MIN) return;
+      suppressClick = true;
+      onSwipe(delta < 0 ? "left" : "right");
+    },
+    { passive: true },
+  );
+}
+
+function handleEdgeTap(direction: "prev" | "next") {
+  if (currentView !== "reader" || !state.comic || settings.readingMode === "webtoon") return;
+  if (direction === "prev") void goPrev();
+  else void goNext();
+}
+
+function handleEdgeSwipe(direction: "left" | "right") {
+  if (currentView !== "reader" || !state.comic || settings.readingMode === "webtoon") return;
+  const rtl = settings.readingDirection === "rtl";
+  if (direction === "left") void (rtl ? goPrev() : goNext());
+  else void (rtl ? goNext() : goPrev());
 }
 
 function setReadingActive(active: boolean) {
@@ -176,6 +397,7 @@ function setView(view: View) {
     setReadingActive(false);
     setChromeHidden(false);
   }
+  updatePageTapZones();
 }
 
 function formatPageLabel(pageIndex: number): string {
@@ -434,55 +656,253 @@ async function renderWebtoon() {
   els.pageContainer.classList.remove("loading");
 }
 
-async function openComic(path: string) {
+async function openComic(path: string, options?: { silent?: boolean }) {
   resetWebtoonState();
-  const meta = await openCbz(path);
-  const savedPage = await getProgress(path);
-  state.comic = meta;
-  state.currentPage = savedPage ?? 0;
-  if (state.currentPage >= meta.pageCount) {
-    state.currentPage = Math.max(0, meta.pageCount - 1);
+  if (isSmbPath(path)) {
+    document.body.classList.add("network-loading");
+    await saveNetworkLibraryFolder(smbParentDirectory(path));
   }
-  closeDrawer();
-  setView("reader");
-  setChromeHidden(true);
-  applyReadingMode();
-  await renderReader();
+  try {
+    const meta = await openCbz(path);
+    const savedPage = await getProgress(path);
+    state.comic = meta;
+    state.currentPage = savedPage ?? 0;
+    if (state.currentPage >= meta.pageCount) {
+      state.currentPage = Math.max(0, meta.pageCount - 1);
+    }
+    settings.lastReadPath = path;
+    await saveSettings(settings);
+    closeDrawer();
+    setView("reader");
+    setChromeHidden(true);
+    setReadingActive(true);
+    applyReadingMode();
+    await renderReader();
+  } catch (error) {
+    if (!options?.silent) {
+      showAppMessage(`Could not open comic: ${String(error)}`);
+    }
+  } finally {
+    document.body.classList.remove("network-loading");
+  }
 }
 
-async function pickCbzFile() {
-  const selected = await open({
-    multiple: false,
-    directory: false,
-    filters: [{ name: "Comic Book", extensions: ["cbz"] }],
+async function restoreLastSession(): Promise<boolean> {
+  const path = settings.lastReadPath;
+  if (!path) return false;
+
+  if (isSmbPath(path)) {
+    if (!settings.networkHost) return false;
+    const ok = await ensureNetworkConnected();
+    if (!ok) return false;
+  }
+
+  await openComic(path, { silent: true });
+  return state.comic !== null;
+}
+
+function openLibrary() {
+  closeDrawer();
+  if (hasConfiguredLibrary()) {
+    showLibrarySetup = false;
+    librarySource = inferLibrarySource();
+    libraryCurrentPath = settings.libraryFolder;
+    if (settings.libraryFolder && isSmbPath(settings.libraryFolder)) {
+      libraryNavStack = buildSmbNavStackFromPath(settings.libraryFolder);
+    } else if (settings.libraryFolder && usesAndroidStorage() && isContentUri(settings.libraryFolder)) {
+      libraryNavStack = [{ name: "Library", path: settings.libraryFolder }];
+    }
+  } else {
+    showLibrarySetup = true;
+  }
+  updateLibrarySetupUi();
+  setView("library");
+  void refreshLibrary();
+}
+
+function setLibrarySource(source: LibrarySource) {
+  librarySource = source;
+  settings.librarySource = source;
+  void saveSettings(settings);
+
+  els.librarySourceTabs.querySelectorAll("[data-source]").forEach((btn) => {
+    btn.classList.toggle("active", btn.getAttribute("data-source") === source);
   });
 
-  if (typeof selected === "string") {
-    await openComic(selected);
+  if (source === "network") {
+    if (hasConfiguredLibrary() && settings.libraryFolder && isSmbPath(settings.libraryFolder)) {
+      libraryCurrentPath = settings.libraryFolder;
+      libraryNavStack = buildSmbNavStackFromPath(settings.libraryFolder);
+    } else {
+      libraryCurrentPath = networkConnected && settings.networkHost
+        ? `smb://${settings.networkHost}/`
+        : null;
+      libraryNavStack = [];
+    }
+  } else {
+    libraryCurrentPath = settings.libraryFolder;
+    if (usesAndroidStorage() && settings.libraryFolder && isContentUri(settings.libraryFolder)) {
+      libraryNavStack = [{ name: "Library", path: settings.libraryFolder }];
+    } else {
+      libraryNavStack = [];
+    }
   }
+
+  updateLibrarySetupUi();
+  void refreshLibrary();
+}
+
+async function connectNetworkLibrary() {
+  if (networkConnecting) return;
+  const host = els.networkHostInput.value.trim();
+  if (!host) {
+    showAppMessage("Enter your NAS IP address or hostname (e.g. 192.168.1.50).");
+    return;
+  }
+
+  networkConnecting = true;
+  els.networkConnectBtn.disabled = true;
+  els.networkConnectBtn.textContent = "Connecting…";
+
+  try {
+    const username = els.networkUsernameInput.value.trim();
+    const password = els.networkPasswordInput.value;
+    const shares = await smbConnect(host, username, password);
+    settings.networkHost = host;
+    settings.networkUsername = username || null;
+    settings.networkPassword = password || null;
+    await saveSettings(settings);
+    networkConnected = true;
+    networkShareList = shares;
+    showLibrarySetup = false;
+
+    if (settings.libraryFolder && isSmbPath(settings.libraryFolder)) {
+      libraryCurrentPath = settings.libraryFolder;
+      libraryNavStack = buildSmbNavStackFromPath(settings.libraryFolder);
+      updateLibrarySetupUi();
+      await refreshLibrary();
+      return;
+    }
+
+    libraryCurrentPath = `smb://${host}/`;
+    libraryNavStack = [{ name: host, path: libraryCurrentPath }];
+    libraryItems = shares;
+    LIBRARY_CACHE.clear();
+    renderLibraryBreadcrumb();
+    els.libraryEmpty.hidden = shares.length > 0;
+    els.libraryEmpty.textContent = shares.length > 0
+      ? ""
+      : "No shared folders found on this server.";
+    els.libraryList.innerHTML = shares
+      .map((item) => {
+        return `<button class="library-item" data-kind="${item.kind}" data-path="${encodeURIComponent(item.path)}">
+          <span class="library-item-title">📁 ${escapeHtml(item.name)}</span>
+          <span class="library-item-meta">Share</span>
+        </button>`;
+      })
+      .join("");
+    updateLibrarySetupUi();
+  } catch (error) {
+    networkConnected = false;
+    showAppMessage(`Network connection failed: ${String(error)}`);
+  } finally {
+    networkConnecting = false;
+    els.networkConnectBtn.disabled = false;
+    els.networkConnectBtn.textContent = "Connect";
+  }
+}
+
+async function applyLibraryFolderSelection(selected: string) {
+  settings.libraryFolder = selected;
+  settings.librarySource = "local";
+  librarySource = "local";
+  libraryCurrentPath = selected;
+  libraryNavStack = [{ name: "Library", path: selected }];
+  LIBRARY_CACHE.clear();
+  showLibrarySetup = false;
+  els.libraryFolderInput.value = usesAndroidStorage()
+    ? "Connected (Android storage)"
+    : selected;
+  await saveSettings(settings);
+  updateLibrarySetupUi();
+  await refreshLibrary();
+  setView("library");
+  closeDrawer();
 }
 
 async function pickLibraryFolder() {
-  const selected = await open({
-    multiple: false,
-    directory: true,
-  });
+  try {
+    if (usesAndroidStorage()) {
+      const selected = await pickAndroidLibraryFolder();
+      if (!selected) return;
+      await applyLibraryFolderSelection(selected);
+      return;
+    }
 
-  if (typeof selected === "string") {
-    settings.libraryFolder = selected;
-    libraryCurrentPath = selected;
-    LIBRARY_CACHE.clear();
-    els.libraryFolderInput.value = selected;
-    await saveSettings(settings);
-    await refreshLibrary();
-    setView("library");
-    closeDrawer();
+    const selected = await open({
+      multiple: false,
+      directory: true,
+    });
+
+    if (typeof selected === "string") {
+      settings.libraryFolder = selected;
+      settings.librarySource = "local";
+      librarySource = "local";
+      libraryCurrentPath = selected;
+      libraryNavStack = [];
+      LIBRARY_CACHE.clear();
+      showLibrarySetup = false;
+      els.libraryFolderInput.value = selected;
+      await saveSettings(settings);
+      updateLibrarySetupUi();
+      await refreshLibrary();
+      setView("library");
+      closeDrawer();
+    }
+  } catch (error) {
+    showAppMessage(`Could not open folder picker: ${String(error)}`);
   }
 }
 
 function renderLibraryBreadcrumb() {
+  if (librarySource === "network") {
+    if (!settings.networkHost || !libraryCurrentPath) {
+      els.libraryBreadcrumb.innerHTML = "";
+      return;
+    }
+
+    if (libraryNavStack.length === 0) {
+      libraryNavStack = [{ name: settings.networkHost, path: `smb://${settings.networkHost}/` }];
+    }
+
+    const crumbs = libraryNavStack.map((item, index) => {
+      const isLast = index === libraryNavStack.length - 1;
+      if (isLast) {
+        return `<span class="crumb current">${escapeHtml(item.name)}</span>`;
+      }
+      return `<button type="button" class="crumb crumb-btn" data-stack-index="${index}">${escapeHtml(item.name)}</button>`;
+    });
+    els.libraryBreadcrumb.innerHTML = crumbs.join('<span class="crumb sep">/</span>');
+    return;
+  }
+
   if (!settings.libraryFolder || !libraryCurrentPath) {
     els.libraryBreadcrumb.innerHTML = "";
+    return;
+  }
+
+  if (usesAndroidStorage() && isContentUri(settings.libraryFolder)) {
+    if (libraryNavStack.length === 0) {
+      libraryNavStack = [{ name: "Library", path: settings.libraryFolder }];
+    }
+    const crumbs = libraryNavStack.map((item, index) => {
+      const isLast = index === libraryNavStack.length - 1;
+      if (isLast) {
+        return `<span class="crumb current">${escapeHtml(item.name)}</span>`;
+      }
+      return `<button type="button" class="crumb crumb-btn" data-stack-index="${index}">${escapeHtml(item.name)}</button>`;
+    });
+    els.libraryBreadcrumb.innerHTML = crumbs.join('<span class="crumb sep">/</span>');
     return;
   }
 
@@ -518,27 +938,173 @@ function renderLibraryBreadcrumb() {
   els.libraryBreadcrumb.innerHTML = crumbs.join("");
 }
 
-async function navigateLibraryTo(path: string) {
+async function navigateLibraryTo(path: string, folderName?: string) {
   libraryCurrentPath = path;
+  if (librarySource === "network" && isSmbPath(path) && folderName) {
+    const existingIndex = libraryNavStack.findIndex((item) => item.path === path);
+    if (existingIndex >= 0) {
+      libraryNavStack = libraryNavStack.slice(0, existingIndex + 1);
+    } else {
+      libraryNavStack.push({ name: folderName, path });
+    }
+  } else if (usesAndroidStorage() && isContentUri(path) && folderName) {
+    const existingIndex = libraryNavStack.findIndex((item) => item.path === path);
+    if (existingIndex >= 0) {
+      libraryNavStack = libraryNavStack.slice(0, existingIndex + 1);
+    } else {
+      libraryNavStack.push({ name: folderName, path });
+    }
+  }
   await refreshLibrary();
 }
 
 function isLibraryRoot(path: string): boolean {
   if (!settings.libraryFolder) return false;
+  if (isSmbPath(path) || isSmbPath(settings.libraryFolder)) {
+    return normalizeSmbPath(path) === normalizeSmbPath(settings.libraryFolder);
+  }
+  if (isContentUri(path)) {
+    return path === settings.libraryFolder;
+  }
   return (
     path.replace(/\\/g, "/").toLowerCase() ===
     settings.libraryFolder.replace(/\\/g, "/").toLowerCase()
   );
 }
 
+function beginLibrarySetupChange() {
+  showLibrarySetup = true;
+  updateLibrarySetupUi();
+  if (librarySource === "network" && !networkConnected) {
+    void ensureNetworkConnected().then((ok) => {
+      if (ok) void refreshLibrary();
+    });
+  }
+}
+
 async function refreshLibrary() {
+  updateLibrarySetupUi();
+
+  if (librarySource === "network") {
+    if (!settings.networkHost) {
+      libraryItems = [];
+      libraryCurrentPath = null;
+      els.libraryList.innerHTML = "";
+      els.libraryEmpty.hidden = false;
+      els.libraryEmpty.textContent = "Connect to your NAS to browse comics over the network.";
+      els.libraryBreadcrumb.innerHTML = "";
+      return;
+    }
+
+    if (!networkConnected) {
+      const ok = await ensureNetworkConnected();
+      if (!ok) {
+        libraryItems = [];
+        libraryCurrentPath = null;
+        els.libraryList.innerHTML = "";
+        els.libraryEmpty.hidden = false;
+        els.libraryEmpty.textContent = "Could not reach your NAS. Tap Change library to update connection details.";
+        els.libraryBreadcrumb.innerHTML = "";
+        return;
+      }
+    }
+
+    if (hasConfiguredLibrary() && !showLibrarySetup) {
+      if (!libraryCurrentPath) {
+        libraryCurrentPath = settings.libraryFolder!;
+      }
+      const atRoot = isLibraryRoot(libraryCurrentPath);
+      const cacheKey = `${libraryCurrentPath}|${atRoot ? "folders" : "all"}`;
+
+      let entries = LIBRARY_CACHE.get(cacheKey);
+      if (!entries) {
+        entries = await listLibraryDirectory(libraryCurrentPath, atRoot);
+        LIBRARY_CACHE.set(cacheKey, entries);
+      }
+
+      libraryItems = entries;
+      renderLibraryBreadcrumb();
+      els.libraryEmpty.hidden = libraryItems.length > 0;
+      els.libraryEmpty.textContent = atRoot
+        ? "No folders found in this library directory."
+        : "This folder is empty.";
+      els.libraryList.innerHTML = libraryItems
+        .map((item) => {
+          const meta =
+            item.kind === "folder"
+              ? `<span class="library-item-meta">Folder</span>`
+              : `<span class="library-item-meta">CBZ</span>`;
+          const icon = item.kind === "folder" ? "📁" : "📖";
+          return `<button class="library-item" data-kind="${item.kind}" data-path="${encodeURIComponent(item.path)}">
+          <span class="library-item-title">${icon} ${escapeHtml(item.name)}</span>
+          ${meta}
+        </button>`;
+        })
+        .join("");
+      return;
+    }
+
+    if (!libraryCurrentPath) {
+      libraryCurrentPath = `smb://${settings.networkHost}/`;
+    }
+
+    const hostRoot = `smb://${settings.networkHost}/`;
+    if (normalizeSmbPath(libraryCurrentPath) === normalizeSmbPath(hostRoot)) {
+      libraryCurrentPath = hostRoot;
+      libraryItems = networkShareList;
+      renderLibraryBreadcrumb();
+      els.libraryEmpty.hidden = networkShareList.length > 0;
+      els.libraryEmpty.textContent = networkShareList.length > 0
+        ? ""
+        : "No shared folders found on this server.";
+      els.libraryList.innerHTML = networkShareList
+        .map((item) => `<button class="library-item" data-kind="${item.kind}" data-path="${encodeURIComponent(item.path)}">
+          <span class="library-item-title">📁 ${escapeHtml(item.name)}</span>
+          <span class="library-item-meta">Share</span>
+        </button>`)
+        .join("");
+      return;
+    }
+
+    const atShareRoot = isNetworkShareRoot(libraryCurrentPath);
+    const cacheKey = `${libraryCurrentPath}|${atShareRoot ? "folders" : "all"}`;
+
+    let entries = LIBRARY_CACHE.get(cacheKey);
+    if (!entries) {
+      entries = await listLibraryDirectory(libraryCurrentPath, atShareRoot);
+      LIBRARY_CACHE.set(cacheKey, entries);
+    }
+
+    libraryItems = entries;
+    renderLibraryBreadcrumb();
+    els.libraryEmpty.hidden = libraryItems.length > 0;
+    els.libraryEmpty.textContent = atShareRoot
+      ? "No folders found in this share."
+      : "This folder is empty.";
+    els.libraryList.innerHTML = libraryItems
+      .map((item) => {
+        const meta =
+          item.kind === "folder"
+            ? `<span class="library-item-meta">${atShareRoot && isNetworkShareRoot(item.path) ? "Share" : "Folder"}</span>`
+            : `<span class="library-item-meta">CBZ</span>`;
+        const icon = item.kind === "folder" ? "📁" : "📖";
+        return `<button class="library-item" data-kind="${item.kind}" data-path="${encodeURIComponent(item.path)}">
+          <span class="library-item-title">${icon} ${escapeHtml(item.name)}</span>
+          ${meta}
+        </button>`;
+      })
+      .join("");
+    return;
+  }
+
   if (!settings.libraryFolder) {
     libraryItems = [];
     libraryCurrentPath = null;
     els.libraryList.innerHTML = "";
     els.libraryEmpty.hidden = false;
-    els.libraryEmpty.textContent =
-      "No folder selected. Open Menu → Open Folder or set one in Settings.";
+    els.libraryEmpty.textContent = usesAndroidStorage()
+      ? "Pick a folder on this device, or use the Network tab for your NAS."
+      : "No folder selected. Use Menu → Open Library Folder or set one in Settings.";
     renderLibraryBreadcrumb();
     return;
   }
@@ -648,6 +1214,11 @@ async function applySettingsFromForm() {
     readingMode: els.modeSelect.value as ReadingMode,
     fitMode: els.fitSelect.value as FitMode,
     libraryFolder: els.libraryFolderInput.value || null,
+    librarySource: settings.librarySource,
+    networkHost: settings.networkHost,
+    networkUsername: settings.networkUsername,
+    networkPassword: settings.networkPassword,
+    lastReadPath: settings.lastReadPath,
   };
   applyTheme();
   applyReadingMode();
@@ -677,16 +1248,68 @@ function bindEvents() {
   document.getElementById("drawer-close")?.addEventListener("click", closeDrawer);
   els.drawerBackdrop.addEventListener("click", closeDrawer);
 
-  document.getElementById("open-file-btn")?.addEventListener("click", () => {
-    void pickCbzFile();
-  });
-
-  document.getElementById("open-folder-btn")?.addEventListener("click", () => {
-    void pickLibraryFolder();
+  document.getElementById("open-library-btn")?.addEventListener("click", () => {
+    openLibrary();
   });
 
   els.prevPageBtn.addEventListener("click", () => void goPrev());
   els.nextPageBtn.addEventListener("click", () => void goNext());
+
+  bindEdgeNav(els.pageZonePrev, () => handleEdgeTap("prev"), handleEdgeSwipe);
+  bindEdgeNav(els.pageZoneNext, () => handleEdgeTap("next"), handleEdgeSwipe);
+
+  els.pageContainer.addEventListener("click", (event) => {
+    if (!isMobile || !chromeHidden || !state.comic || settings.readingMode === "webtoon") return;
+    const target = event.target as HTMLElement;
+    if (!target.closest(".page-image")) return;
+    const x = (event as MouseEvent).clientX;
+    const edge = window.innerWidth * 0.22;
+    if (x >= edge && x <= window.innerWidth - edge) revealChromeBriefly();
+  });
+
+  let centerTouchStart: { x: number; y: number; multi: boolean } | null = null;
+  els.pageContainer.addEventListener(
+    "touchstart",
+    (event) => {
+      if (!isMobile || !state.comic || settings.readingMode === "webtoon") return;
+      centerTouchStart = {
+        x: event.touches[0]?.clientX ?? 0,
+        y: event.touches[0]?.clientY ?? 0,
+        multi: event.touches.length > 1,
+      };
+    },
+    { passive: true },
+  );
+  els.pageContainer.addEventListener(
+    "touchmove",
+    (event) => {
+      if (centerTouchStart && event.touches.length > 1) centerTouchStart.multi = true;
+    },
+    { passive: true },
+  );
+  els.pageContainer.addEventListener(
+    "touchend",
+    (event) => {
+      if (!centerTouchStart || !isMobile || !chromeHidden || !state.comic) {
+        centerTouchStart = null;
+        return;
+      }
+      if (centerTouchStart.multi || event.changedTouches.length !== 1) {
+        centerTouchStart = null;
+        return;
+      }
+      const x = event.changedTouches[0]?.clientX ?? 0;
+      const y = event.changedTouches[0]?.clientY ?? 0;
+      const dx = x - centerTouchStart.x;
+      const dy = y - centerTouchStart.y;
+      centerTouchStart = null;
+      if (Math.hypot(dx, dy) > 16) return;
+      const edge = window.innerWidth * 0.22;
+      if (x >= edge && x <= window.innerWidth - edge) revealChromeBriefly();
+    },
+    { passive: true },
+  );
+
   els.chromeToggle.addEventListener("click", toggleChrome);
 
   els.pageInfoBtn.addEventListener("click", beginPageJump);
@@ -711,6 +1334,11 @@ function bindEvents() {
       setView(view);
       closeDrawer();
       if (view === "library") {
+        if (hasConfiguredLibrary()) {
+          showLibrarySetup = false;
+          libraryCurrentPath = settings.libraryFolder;
+        }
+        updateLibrarySetupUi();
         void refreshLibrary();
       }
     });
@@ -722,13 +1350,29 @@ function bindEvents() {
     const path = decodeURIComponent(target.dataset.path ?? "");
     const kind = target.dataset.kind;
     if (kind === "folder") {
-      void navigateLibraryTo(path);
+      const folderName = target.querySelector(".library-item-title")?.textContent?.replace(/^📁\s*/, "") ?? "Folder";
+      void navigateLibraryTo(path, folderName);
     } else {
       void openComic(path);
     }
   });
 
   els.libraryBreadcrumb.addEventListener("click", (event) => {
+    const stackTarget = (event.target as HTMLElement).closest(
+      ".crumb-btn[data-stack-index]",
+    ) as HTMLElement | null;
+    if (stackTarget) {
+      const index = Number(stackTarget.dataset.stackIndex ?? "0");
+      libraryNavStack = libraryNavStack.slice(0, index + 1);
+      libraryCurrentPath =
+        libraryNavStack[index]?.path ??
+        (librarySource === "network" && settings.networkHost
+          ? `smb://${settings.networkHost}/`
+          : settings.libraryFolder);
+      void refreshLibrary();
+      return;
+    }
+
     const target = (event.target as HTMLElement).closest(".crumb-btn") as HTMLElement | null;
     if (!target) return;
     const path = decodeURIComponent(target.dataset.path ?? "");
@@ -768,6 +1412,25 @@ function bindEvents() {
 
   document.getElementById("browse-library-folder")?.addEventListener("click", () => {
     void pickLibraryFolder();
+  });
+
+  els.libraryPickFolderBtn.addEventListener("click", () => {
+    void pickLibraryFolder();
+  });
+
+  els.librarySourceTabs.querySelectorAll("[data-source]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const source = btn.getAttribute("data-source") as LibrarySource;
+      setLibrarySource(source);
+    });
+  });
+
+  els.networkConnectBtn.addEventListener("click", () => {
+    void connectNetworkLibrary();
+  });
+
+  els.libraryChangeBtn.addEventListener("click", () => {
+    beginLibrarySetupChange();
   });
 
   window.addEventListener("keydown", (event) => {
@@ -830,23 +1493,6 @@ function bindEvents() {
     else void goPrev();
   }, { passive: false });
 
-  let touchStartX = 0;
-  window.addEventListener("touchstart", (event) => {
-    touchStartX = event.changedTouches[0]?.clientX ?? 0;
-  });
-
-  window.addEventListener("touchend", (event) => {
-    if (currentView !== "reader" || !state.comic || settings.readingMode === "webtoon") return;
-    const touchEndX = event.changedTouches[0]?.clientX ?? 0;
-    const delta = touchEndX - touchStartX;
-    if (Math.abs(delta) < 50) {
-      if (isMobile && chromeHidden) revealChromeBriefly();
-      return;
-    }
-    if (delta < 0) void goNext();
-    else void goPrev();
-  });
-
   window.addEventListener("dragover", (event) => {
     if (isMobile) return;
     event.preventDefault();
@@ -864,7 +1510,16 @@ function bindEvents() {
 }
 
 export async function initApp() {
-  isMobile = detectMobilePlatform();
+  try {
+    appPlatform = await getPlatform();
+  } catch {
+    appPlatform = /Android/i.test(navigator.userAgent) ? "android" : "desktop";
+  }
+  isAndroid = appPlatform === "android";
+  isMobile = appPlatform === "android" || appPlatform === "ios";
+
+  document.getElementById("library-nav-btn")?.removeAttribute("hidden");
+  document.querySelector('.nav-btn[data-view="library"]')?.removeAttribute("hidden");
   applyMobileUi();
 
   settings = await getSettings();
@@ -876,16 +1531,40 @@ export async function initApp() {
   els.modeSelect.value = settings.readingMode;
   els.fitSelect.value = settings.fitMode;
   els.libraryFolderInput.value = settings.libraryFolder ?? "";
+  els.networkHostInput.value = settings.networkHost ?? "";
+  els.networkUsernameInput.value = settings.networkUsername ?? "";
+  els.networkPasswordInput.value = settings.networkPassword ?? "";
+
+  librarySource = inferLibrarySource();
+  settings.librarySource = librarySource;
+  els.librarySourceTabs.querySelectorAll("[data-source]").forEach((btn) => {
+    btn.classList.toggle("active", btn.getAttribute("data-source") === librarySource);
+  });
+  showLibrarySetup = !hasConfiguredLibrary();
+  updateLibrarySetupUi();
 
   applyTheme();
   applyReadingMode();
   bindEvents();
-  setView("reader");
-  setReadingActive(false);
   updatePageInfo();
 
-  if (settings.libraryFolder && !isMobile) {
+  if (librarySource === "network" && settings.networkHost) {
+    await ensureNetworkConnected();
+  }
+
+  const restored = await restoreLastSession();
+  if (!restored) {
+    setView("reader");
+    setReadingActive(false);
+  }
+
+  if (settings.libraryFolder) {
     libraryCurrentPath = settings.libraryFolder;
+    if (isSmbPath(settings.libraryFolder)) {
+      libraryNavStack = buildSmbNavStackFromPath(settings.libraryFolder);
+    } else if (usesAndroidStorage() && isContentUri(settings.libraryFolder)) {
+      libraryNavStack = [{ name: "Library", path: settings.libraryFolder }];
+    }
     await refreshLibrary();
   }
 }

@@ -16,6 +16,30 @@ export async function listLibraryDirectory(
   return invoke("list_library_directory", { path, foldersOnly });
 }
 
+export async function pickAndroidLibraryFolder(): Promise<string | null> {
+  return invoke<string | null>("pick_library_folder");
+}
+
+export async function pickAndroidCbzFile(): Promise<string | null> {
+  return invoke<string | null>("pick_cbz_file");
+}
+
+export async function smbConnect(
+  host: string,
+  username: string,
+  password: string,
+): Promise<LibraryEntry[]> {
+  return invoke("smb_connect", { host, username, password });
+}
+
+export async function smbDisconnect(): Promise<void> {
+  await invoke("smb_disconnect");
+}
+
+export async function getPlatform(): Promise<string> {
+  return invoke<string>("get_platform");
+}
+
 export async function getProgress(path: string): Promise<number | null> {
   const page = await invoke<number | null>("get_progress", { path });
   return page;

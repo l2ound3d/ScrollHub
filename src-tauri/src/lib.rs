@@ -1,14 +1,19 @@
 mod cbz;
+#[cfg(target_os = "android")]
+mod android_library;
 mod library;
 mod path_resolver;
 mod progress;
 mod settings;
+mod smb_library;
 
 use cbz::{get_page_data, open_cbz, ComicMeta, PageData};
 use library::{list_directory, LibraryEntry};
 use settings::{load_settings, save_settings, AppSettings};
+use smb_library::{SmbState, SMB_PREFIX};
 use std::path::PathBuf;
 use tauri::Manager;
+use tauri::State;
 
 #[tauri::command]
 fn open_cbz_file(app: tauri::AppHandle, path: String) -> Result<ComicMeta, String> {
@@ -27,8 +32,89 @@ fn get_page(app: tauri::AppHandle, path: String, index: usize) -> Result<PageDat
 }
 
 #[tauri::command]
-fn list_library_directory(path: String, folders_only: bool) -> Result<Vec<LibraryEntry>, String> {
+async fn smb_connect(
+    host: String,
+    username: String,
+    password: String,
+    state: State<'_, SmbState>,
+) -> Result<Vec<LibraryEntry>, String> {
+    state
+        .connect_and_list_shares(host.trim(), username.trim(), password.as_str())
+        .await
+}
+
+#[tauri::command]
+async fn smb_list_directory(
+    path: String,
+    folders_only: bool,
+    state: State<'_, SmbState>,
+) -> Result<Vec<LibraryEntry>, String> {
+    state.list_directory(&path, folders_only).await
+}
+
+#[tauri::command]
+async fn smb_disconnect(state: State<'_, SmbState>) -> Result<(), String> {
+    state.disconnect().await
+}
+
+#[tauri::command]
+fn pick_cbz_file(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    #[cfg(target_os = "android")]
+    {
+        return android_library::pick_cbz(&app);
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = app;
+        Err("Use the desktop file dialog instead.".into())
+    }
+}
+
+#[tauri::command]
+fn list_library_directory(
+    app: tauri::AppHandle,
+    path: String,
+    folders_only: bool,
+    state: State<'_, SmbState>,
+) -> Result<Vec<LibraryEntry>, String> {
+    if path.starts_with(SMB_PREFIX) {
+        return tauri::async_runtime::block_on(state.list_directory(&path, folders_only));
+    }
+    if path.starts_with("content://") {
+        #[cfg(target_os = "android")]
+        {
+            return android_library::list_directory(&app, &path, folders_only);
+        }
+        #[cfg(not(target_os = "android"))]
+        {
+            return Err("Content folder paths are only supported on Android.".into());
+        }
+    }
     list_directory(PathBuf::from(path).as_path(), folders_only)
+}
+
+#[tauri::command]
+fn get_platform() -> String {
+    if cfg!(target_os = "android") {
+        "android".into()
+    } else if cfg!(target_os = "ios") {
+        "ios".into()
+    } else {
+        "desktop".into()
+    }
+}
+
+#[tauri::command]
+fn pick_library_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    #[cfg(target_os = "android")]
+    {
+        return android_library::pick_folder(&app);
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = app;
+        Err("Use the desktop folder dialog instead.".into())
+    }
 }
 
 #[tauri::command]
@@ -79,10 +165,17 @@ pub fn run() {
     }
 
     builder
+        .manage(SmbState::default())
         .invoke_handler(tauri::generate_handler![
             open_cbz_file,
             get_page,
             list_library_directory,
+            get_platform,
+            pick_library_folder,
+            pick_cbz_file,
+            smb_connect,
+            smb_list_directory,
+            smb_disconnect,
             get_progress,
             save_progress,
             get_settings,

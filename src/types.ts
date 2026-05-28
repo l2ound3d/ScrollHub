@@ -22,6 +22,12 @@ export interface AppSettings {
   readingMode: "single" | "double" | "webtoon";
   fitMode: "width" | "height" | "original";
   libraryFolder: string | null;
+  librarySource: LibrarySource | null;
+  networkHost: string | null;
+  networkUsername: string | null;
+  networkPassword: string | null;
+  lastReadPath: string | null;
 }
 
 export type View = "reader" | "library" | "settings";
+export type LibrarySource = "local" | "network";

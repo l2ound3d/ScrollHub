@@ -10,6 +10,16 @@ pub struct AppSettings {
     pub reading_mode: String,
     pub fit_mode: String,
     pub library_folder: Option<String>,
+    #[serde(default)]
+    pub library_source: Option<String>,
+    #[serde(default)]
+    pub network_host: Option<String>,
+    #[serde(default)]
+    pub network_username: Option<String>,
+    #[serde(default)]
+    pub network_password: Option<String>,
+    #[serde(default)]
+    pub last_read_path: Option<String>,
 }
 
 impl Default for AppSettings {
@@ -20,6 +30,11 @@ impl Default for AppSettings {
             reading_mode: "single".into(),
             fit_mode: "width".into(),
             library_folder: None,
+            library_source: None,
+            network_host: None,
+            network_username: None,
+            network_password: None,
+            last_read_path: None,
         }
     }
 }

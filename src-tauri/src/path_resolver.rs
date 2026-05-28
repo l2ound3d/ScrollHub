@@ -1,10 +1,60 @@
 use std::io::copy;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use tauri::AppHandle;
 use tauri::Manager;
 
 #[cfg(target_os = "android")]
 use tauri_plugin_android_fs::{AndroidFsExt, FileUri};
+
+use crate::smb_library::{self, SmbState};
+
+static ACTIVE_CACHE_FILE: Mutex<Option<PathBuf>> = Mutex::new(None);
+
+fn cbz_cache_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    Ok(app
+        .path()
+        .app_cache_dir()
+        .map_err(|e| e.to_string())?
+        .join("cbz-cache"))
+}
+
+fn is_under_cbz_cache(app: &AppHandle, path: &Path) -> bool {
+    cbz_cache_dir(app)
+        .ok()
+        .and_then(|dir| path.strip_prefix(dir).ok())
+        .is_some()
+}
+
+fn drop_cached_file() {
+    let Ok(mut guard) = ACTIVE_CACHE_FILE.lock() else {
+        return;
+    };
+    if let Some(prev) = guard.take() {
+        let _ = std::fs::remove_file(prev);
+    }
+}
+
+fn activate_cache_file(cache_path: PathBuf) {
+    let Ok(mut guard) = ACTIVE_CACHE_FILE.lock() else {
+        return;
+    };
+    if let Some(prev) = guard.as_ref() {
+        if prev != &cache_path {
+            let _ = std::fs::remove_file(prev);
+        }
+    }
+    *guard = Some(cache_path);
+}
+
+fn finish_resolved_path(app: &AppHandle, resolved: PathBuf) -> PathBuf {
+    if is_under_cbz_cache(app, &resolved) {
+        activate_cache_file(resolved.clone());
+    } else {
+        drop_cached_file();
+    }
+    resolved
+}
 
 fn is_content_uri(path: &str) -> bool {
     path.starts_with("content://")
@@ -29,7 +79,7 @@ fn sanitize_filename(name: &str) -> String {
 }
 
 #[cfg(target_os = "android")]
-fn file_uri(path: &str) -> FileUri {
+pub fn file_uri(path: &str) -> FileUri {
     FileUri {
         uri: path.to_string(),
         document_top_tree_uri: None,
@@ -38,17 +88,18 @@ fn file_uri(path: &str) -> FileUri {
 
 #[cfg(target_os = "android")]
 pub fn resolve_read_path(app: &AppHandle, path: &str) -> Result<PathBuf, String> {
+    if smb_library::is_smb_path(path) {
+        let state = app.state::<SmbState>();
+        let dest = tauri::async_runtime::block_on(state.download_to_cache(app, path))?;
+        return Ok(finish_resolved_path(app, dest));
+    }
     if !is_content_uri(path) {
-        return Ok(PathBuf::from(path));
+        return Ok(finish_resolved_path(app, PathBuf::from(path)));
     }
 
     let uri = file_uri(path);
     let api = app.android_fs();
-    let cache_dir = app
-        .path()
-        .app_cache_dir()
-        .map_err(|e| e.to_string())?
-        .join("cbz-cache");
+    let cache_dir = cbz_cache_dir(app)?;
     std::fs::create_dir_all(&cache_dir).map_err(|e| e.to_string())?;
 
     let display_name = api
@@ -66,34 +117,46 @@ pub fn resolve_read_path(app: &AppHandle, path: &str) -> Result<PathBuf, String>
         copy(&mut src, &mut dest_file).map_err(|e| format!("Failed to copy CBZ file: {e}"))?;
     }
 
-    Ok(dest)
+    Ok(finish_resolved_path(app, dest))
 }
 
 #[cfg(not(target_os = "android"))]
-pub fn resolve_read_path(_app: &AppHandle, path: &str) -> Result<PathBuf, String> {
-    Ok(PathBuf::from(path))
+pub fn resolve_read_path(app: &AppHandle, path: &str) -> Result<PathBuf, String> {
+    if smb_library::is_smb_path(path) {
+        let state = app.state::<SmbState>();
+        let dest = tauri::async_runtime::block_on(state.download_to_cache(app, path))?;
+        return Ok(finish_resolved_path(app, dest));
+    }
+    Ok(finish_resolved_path(app, PathBuf::from(path)))
 }
 
-#[cfg(target_os = "android")]
 pub fn display_title_for_path(app: &AppHandle, path: &str, fallback: &str) -> String {
-    if !is_content_uri(path) {
+    if smb_library::is_smb_path(path) {
+        return smb_library::display_title_for_smb_path(path);
+    }
+
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = app;
         return fallback.to_string();
     }
 
-    let uri = file_uri(path);
-    let name = app
-        .android_fs()
-        .get_name(&uri)
-        .unwrap_or_else(|_| fallback.to_string());
+    #[cfg(target_os = "android")]
+    {
+        if !is_content_uri(path) {
+            return fallback.to_string();
+        }
 
-    Path::new(&name)
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or(fallback)
-        .to_string()
-}
+        let uri = file_uri(path);
+        let name = app
+            .android_fs()
+            .get_name(&uri)
+            .unwrap_or_else(|_| fallback.to_string());
 
-#[cfg(not(target_os = "android"))]
-pub fn display_title_for_path(_app: &AppHandle, _path: &str, fallback: &str) -> String {
-    fallback.to_string()
+        Path::new(&name)
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or(fallback)
+            .to_string()
+    }
 }

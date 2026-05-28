@@ -249,6 +249,12 @@ body.chrome-hidden.chrome-reveal .chrome {
   gap: 0.5rem;
 }
 
+.drawer-library-btn {
+  font-weight: 600;
+  text-align: center;
+  padding: 0.65rem 0.75rem;
+}
+
 .drawer-hint {
   margin-top: auto;
   font-size: 0.75rem;
@@ -286,6 +292,7 @@ body.chrome-hidden.chrome-reveal .chrome {
   flex-direction: column;
   padding: 0;
   overflow: hidden;
+  position: relative;
 }
 
 body.library-active #reader-view,
@@ -353,27 +360,51 @@ body.reading-active.chrome-hidden .page-container {
   height: auto;
   user-select: none;
   border-radius: 2px;
+  touch-action: pinch-zoom;
+}
+
+.page-tap-zones {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  grid-template-columns: min(22vw, 96px) 1fr min(22vw, 96px);
+  pointer-events: none;
+}
+
+.page-tap-zones[hidden] {
+  display: none !important;
+}
+
+.page-tap-zone {
+  pointer-events: auto;
+  border: none;
+  background: transparent;
+  margin: 0;
+  padding: 0;
+  cursor: default;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .page-image.fit-width {
   width: 100%;
   height: auto;
-  max-height: calc(100vh - var(--chrome-h) - 0.75rem);
+  max-height: calc(100vh - var(--chrome-h) - var(--safe-top, 0px) - 0.75rem);
   object-fit: contain;
 }
 
 body.reading-active.chrome-hidden .page-image.fit-width {
-  max-height: 100vh;
+  max-height: calc(100vh - var(--safe-top, 0px) - var(--safe-bottom, 0px));
 }
 
 .page-image.fit-height {
-  max-height: calc(100vh - var(--chrome-h) - 0.75rem);
+  max-height: calc(100vh - var(--chrome-h) - var(--safe-top, 0px) - 0.75rem);
   width: auto;
   object-fit: contain;
 }
 
 body.reading-active.chrome-hidden .page-image.fit-height {
-  max-height: 100vh;
+  max-height: calc(100vh - var(--safe-top, 0px) - var(--safe-bottom, 0px));
 }
 
 .page-image.fit-original {
@@ -506,6 +537,88 @@ body[data-reading-mode="webtoon"] .webtoon-image.fit-height {
   gap: 0.5rem;
 }
 
+.library-header {
+  flex-wrap: wrap;
+}
+
+.library-setup-panel {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0 1rem 1rem;
+  max-width: 420px;
+}
+
+.library-source-tabs {
+  display: flex;
+  gap: 0.35rem;
+  margin: 0;
+  max-width: none;
+}
+
+.source-tab {
+  flex: 1;
+  border: 1px solid var(--panel-border);
+  background: transparent;
+  color: var(--text);
+  border-radius: 8px;
+  padding: 0.55rem 0.75rem;
+  cursor: pointer;
+}
+
+.source-tab.active {
+  background: rgba(110, 168, 254, 0.18);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.library-network-panel {
+  display: grid;
+  gap: 0.65rem;
+  margin: 0;
+  max-width: none;
+}
+
+.network-field {
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.9rem;
+}
+
+.network-field input {
+  padding: 0.55rem 0.65rem;
+  border-radius: 8px;
+  border: 1px solid var(--panel-border);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.library-change-btn {
+  margin: 0 1rem 0.75rem;
+  max-width: 420px;
+  width: 100%;
+}
+
+.network-connect-btn {
+  width: 100%;
+}
+
+body.network-loading::after {
+  content: "Downloading from network…";
+  position: fixed;
+  inset: auto 0 0;
+  padding: 0.75rem 1rem;
+  background: rgba(14, 15, 18, 0.92);
+  color: var(--text);
+  text-align: center;
+  z-index: 100;
+  pointer-events: none;
+}
+
+.library-pick-btn {
+  margin: 0;
+  max-width: none;
+}
+
 .library-item {
   display: flex;
   justify-content: space-between;
@@ -570,19 +683,28 @@ body[data-reading-mode="webtoon"] .webtoon-image.fit-height {
 }
 
 body[data-platform="mobile"] {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
   --chrome-h: 48px;
-  padding-top: env(safe-area-inset-top);
-  padding-bottom: env(safe-area-inset-bottom);
+  padding-bottom: var(--safe-bottom);
+}
+
+body[data-platform="mobile"] .chrome {
+  padding-top: var(--safe-top);
+  height: calc(var(--chrome-h) + var(--safe-top));
+  box-sizing: border-box;
+  align-items: flex-end;
+}
+
+body[data-platform="mobile"] .drawer {
+  width: min(85vw, 320px);
+  padding-top: calc(1rem + var(--safe-top));
 }
 
 body[data-platform="mobile"] .icon-btn {
   min-width: 44px;
   min-height: 44px;
   font-size: 1.15rem;
-}
-
-body[data-platform="mobile"] .drawer {
-  width: min(85vw, 320px);
 }
 
 body[data-platform="mobile"] .page-slider {
