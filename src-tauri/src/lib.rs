@@ -1,5 +1,6 @@
 mod cbz;
 mod library;
+mod path_resolver;
 mod progress;
 mod settings;
 
@@ -10,13 +11,19 @@ use std::path::PathBuf;
 use tauri::Manager;
 
 #[tauri::command]
-fn open_cbz_file(path: String) -> Result<ComicMeta, String> {
-    open_cbz(PathBuf::from(path).as_path())
+fn open_cbz_file(app: tauri::AppHandle, path: String) -> Result<ComicMeta, String> {
+    let read_path = path_resolver::resolve_read_path(&app, &path)?;
+    let mut meta = open_cbz(read_path.as_path())?;
+    let title = path_resolver::display_title_for_path(&app, &path, &meta.title);
+    meta.title = title;
+    meta.path = path;
+    Ok(meta)
 }
 
 #[tauri::command]
-fn get_page(path: String, index: usize) -> Result<PageData, String> {
-    get_page_data(PathBuf::from(path).as_path(), index)
+fn get_page(app: tauri::AppHandle, path: String, index: usize) -> Result<PageData, String> {
+    let read_path = path_resolver::resolve_read_path(&app, &path)?;
+    get_page_data(read_path.as_path(), index)
 }
 
 #[tauri::command]
@@ -62,9 +69,16 @@ fn save_settings_cmd(app: tauri::AppHandle, settings: AppSettings) -> Result<(),
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_opener::init());
+
+    #[cfg(target_os = "android")]
+    {
+        builder = builder.plugin(tauri_plugin_android_fs::init());
+    }
+
+    builder
         .invoke_handler(tauri::generate_handler![
             open_cbz_file,
             get_page,

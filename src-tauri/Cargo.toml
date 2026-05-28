@@ -27,3 +27,6 @@ strip = true
 lto = true
 codegen-units = 1
 panic = "abort"
+
+[target.'cfg(target_os = "android")'.dependencies]
+tauri-plugin-android-fs = "28.1.0"

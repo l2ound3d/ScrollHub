@@ -1,4 +1,5 @@
 import { open } from "@tauri-apps/plugin-dialog";
+import { type as osType } from "@tauri-apps/plugin-os";
 import {
   getPage,
   getProgress,
@@ -50,6 +51,7 @@ let currentView: View = "reader";
 let chromeHidden = false;
 let drawerOpen = false;
 let chromeRevealTimer: ReturnType<typeof setTimeout> | null = null;
+let isMobile = false;
 
 const els = {
   app: document.getElementById("app")!,
@@ -78,6 +80,30 @@ const els = {
   prevPageBtn: document.getElementById("prev-page-btn") as HTMLButtonElement,
   nextPageBtn: document.getElementById("next-page-btn") as HTMLButtonElement,
 };
+
+function applyMobileUi() {
+  if (!isMobile) return;
+
+  document.body.dataset.platform = "mobile";
+  document.getElementById("open-folder-btn")?.setAttribute("hidden", "");
+  document.querySelector('.nav-btn[data-view="library"]')?.setAttribute("hidden", "");
+  document.getElementById("library-folder")?.closest("label")?.setAttribute("hidden", "");
+  document.querySelector(".drawer-hint")!.textContent = "Tap edges to turn pages · Menu for settings";
+
+  const emptySub = document.querySelector(".empty-sub");
+  if (emptySub) {
+    emptySub.textContent = "Tap the folder icon to open a .cbz file";
+  }
+}
+
+function detectMobilePlatform(): boolean {
+  try {
+    const platform = osType();
+    return platform === "android" || platform === "ios";
+  } catch {
+    return /Android|iPhone|iPad/i.test(navigator.userAgent);
+  }
+}
 
 function applyTheme() {
   document.documentElement.dataset.theme = settings.theme;
@@ -813,14 +839,21 @@ function bindEvents() {
     if (currentView !== "reader" || !state.comic || settings.readingMode === "webtoon") return;
     const touchEndX = event.changedTouches[0]?.clientX ?? 0;
     const delta = touchEndX - touchStartX;
-    if (Math.abs(delta) < 50) return;
+    if (Math.abs(delta) < 50) {
+      if (isMobile && chromeHidden) revealChromeBriefly();
+      return;
+    }
     if (delta < 0) void goNext();
     else void goPrev();
   });
 
-  window.addEventListener("dragover", (event) => event.preventDefault());
+  window.addEventListener("dragover", (event) => {
+    if (isMobile) return;
+    event.preventDefault();
+  });
 
   window.addEventListener("drop", (event) => {
+    if (isMobile) return;
     event.preventDefault();
     const files = Array.from(event.dataTransfer?.files ?? []);
     const paths = files
@@ -831,6 +864,9 @@ function bindEvents() {
 }
 
 export async function initApp() {
+  isMobile = detectMobilePlatform();
+  applyMobileUi();
+
   settings = await getSettings();
   if (!["single", "double", "webtoon"].includes(settings.readingMode)) {
     settings.readingMode = "single";
@@ -848,7 +884,7 @@ export async function initApp() {
   setReadingActive(false);
   updatePageInfo();
 
-  if (settings.libraryFolder) {
+  if (settings.libraryFolder && !isMobile) {
     libraryCurrentPath = settings.libraryFolder;
     await refreshLibrary();
   }

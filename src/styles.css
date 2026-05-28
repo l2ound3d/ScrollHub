@@ -568,3 +568,23 @@ body[data-reading-mode="webtoon"] .webtoon-image.fit-height {
     width: 100%;
   }
 }
+
+body[data-platform="mobile"] {
+  --chrome-h: 48px;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+body[data-platform="mobile"] .icon-btn {
+  min-width: 44px;
+  min-height: 44px;
+  font-size: 1.15rem;
+}
+
+body[data-platform="mobile"] .drawer {
+  width: min(85vw, 320px);
+}
+
+body[data-platform="mobile"] .page-slider {
+  min-width: 80px;
+}
