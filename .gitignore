@@ -27,3 +27,4 @@ dist-ssr
 src-tauri/target/android/
 src-tauri/gen/android/app/src/main/assets/
 release-assets/
+store-assets/

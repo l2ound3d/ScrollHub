@@ -147,6 +147,69 @@ function smbParentDirectory(filePath: string): string {
   return normalized.slice(0, lastSlash);
 }
 
+function normalizeComicPath(path: string): string {
+  return path.replace(/\\/g, "/").toLowerCase();
+}
+
+function parentDirectoryOfComic(filePath: string): string | null {
+  if (isContentUri(filePath)) return null;
+  if (isSmbPath(filePath)) return smbParentDirectory(filePath);
+
+  const backslash = filePath.lastIndexOf("\\");
+  if (backslash > 0) return filePath.slice(0, backslash);
+
+  const slash = filePath.lastIndexOf("/");
+  if (slash > 0) return filePath.slice(0, slash);
+
+  return null;
+}
+
+async function findCbzSiblingInFolder(offset: -1 | 1): Promise<string | null> {
+  if (!state.comic || !isDesktopApp()) return null;
+
+  const currentPath = state.comic.path;
+  const parentDir = parentDirectoryOfComic(currentPath);
+  if (!parentDir) return null;
+
+  if (isSmbPath(currentPath)) {
+    const ok = await ensureNetworkConnected();
+    if (!ok) return null;
+  }
+
+  try {
+    const entries = await listLibraryDirectory(parentDir, false);
+    const comics = entries.filter((entry) => entry.kind === "cbz");
+    if (comics.length <= 1) return null;
+
+    const currentNorm = normalizeComicPath(currentPath);
+    const index = comics.findIndex((entry) => normalizeComicPath(entry.path) === currentNorm);
+    if (index < 0) return null;
+
+    const targetIndex = index + offset;
+    if (targetIndex < 0 || targetIndex >= comics.length) return null;
+
+    return comics[targetIndex].path;
+  } catch {
+    return null;
+  }
+}
+
+async function openNextComicInFolder(): Promise<boolean> {
+  const nextPath = await findCbzSiblingInFolder(1);
+  if (!nextPath) return false;
+
+  await openComic(nextPath);
+  return normalizeComicPath(state.comic?.path ?? "") === normalizeComicPath(nextPath);
+}
+
+async function openPrevComicInFolder(): Promise<boolean> {
+  const prevPath = await findCbzSiblingInFolder(-1);
+  if (!prevPath) return false;
+
+  await openComic(prevPath, { startAt: "end" });
+  return normalizeComicPath(state.comic?.path ?? "") === normalizeComicPath(prevPath);
+}
+
 function buildSmbNavStackFromPath(targetPath: string): { name: string; path: string }[] {
   const rest = targetPath.slice("smb://".length);
   const parts = rest.split("/").filter(Boolean);
@@ -355,7 +418,7 @@ function applyMobileUi() {
 
   const drawerHint = document.getElementById("drawer-hint");
   if (drawerHint) {
-    drawerHint.textContent = "ScrollHub v0.1.3-android";
+    drawerHint.textContent = "ScrollHub v0.1.4-android";
   }
 
   const emptySub = document.querySelector(".empty-sub");
@@ -2342,7 +2405,10 @@ async function renderWebtoon() {
   els.pageContainer.classList.remove("loading");
 }
 
-async function openComic(path: string, options?: { silent?: boolean }) {
+async function openComic(
+  path: string,
+  options?: { silent?: boolean; startAt?: "saved" | "beginning" | "end" },
+) {
   const previousPath = state.comic?.path ?? null;
   resetWebtoonState();
   if (isSmbPath(path)) {
@@ -2354,9 +2420,15 @@ async function openComic(path: string, options?: { silent?: boolean }) {
     if (previousPath !== path) {
       clearPaginatedPersistedZoom();
     }
-    const savedPage = await getProgress(path);
+    const startAt = options?.startAt ?? "saved";
+    let page = 0;
+    if (startAt === "saved") {
+      page = (await getProgress(path)) ?? 0;
+    } else if (startAt === "end") {
+      page = Math.max(0, meta.pageCount - 1);
+    }
     state.comic = meta;
-    state.currentPage = savedPage ?? 0;
+    state.currentPage = page;
     if (state.currentPage >= meta.pageCount) {
       state.currentPage = Math.max(0, meta.pageCount - 1);
     }
@@ -2874,6 +2946,10 @@ async function goNext() {
 
   if (settings.readingMode === "webtoon") {
     const next = Math.min(state.comic.pageCount - 1, state.currentPage + 1);
+    if (next === state.currentPage) {
+      if (isDesktopApp()) await openNextComicInFolder();
+      return;
+    }
     state.currentPage = next;
     scrollToWebtoonPage(next);
     updatePageInfo();
@@ -2887,6 +2963,11 @@ async function goNext() {
   if (next >= 0 && next < state.comic.pageCount) {
     state.currentPage = next;
     await renderReader();
+    return;
+  }
+
+  if (isDesktopApp()) {
+    await openNextComicInFolder();
   }
 }
 
@@ -2895,6 +2976,10 @@ async function goPrev() {
 
   if (settings.readingMode === "webtoon") {
     const prev = Math.max(0, state.currentPage - 1);
+    if (prev === state.currentPage) {
+      if (isDesktopApp()) await openPrevComicInFolder();
+      return;
+    }
     state.currentPage = prev;
     scrollToWebtoonPage(prev);
     updatePageInfo();
@@ -2908,6 +2993,11 @@ async function goPrev() {
   if (prev >= 0 && prev < state.comic.pageCount) {
     state.currentPage = prev;
     await renderReader();
+    return;
+  }
+
+  if (isDesktopApp()) {
+    await openPrevComicInFolder();
   }
 }
 

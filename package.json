@@ -1,7 +1,7 @@
 {
   "name": "scrollhub",
   "private": true,
-  "version": "0.1.3",
+  "version": "0.1.4",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "android:build": "powershell -ExecutionPolicy Bypass -File scripts/android-build.ps1",
-    "android:play": "powershell -ExecutionPolicy Bypass -File scripts/android-play-build.ps1"
+    "android:play": "powershell -ExecutionPolicy Bypass -File scripts/android-play-build.ps1",
+    "android:screenshots": "powershell -ExecutionPolicy Bypass -File scripts/android-screenshots.ps1"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
