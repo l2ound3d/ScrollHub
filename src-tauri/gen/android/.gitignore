@@ -15,6 +15,9 @@ build
 local.properties
 key.properties
 keystore.properties
+scrollhub-upload.jks
+UPLOAD_KEY_BACKUP.txt
+*.jks
 
 /.tauri
 /tauri.settings.gradle
