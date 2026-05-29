@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ScrollHub Privacy Policy</title>
+    <meta
+      name="description"
+      content="Privacy policy for ScrollHub, a CBZ comic reader for Android and Windows."
+    />
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #0f1115;
+        --text: #e8eaed;
+        --muted: #9aa0a6;
+        --accent: #7c9cff;
+        --border: #2a2f3a;
+        --card: #171a21;
+      }
+
+      @media (prefers-color-scheme: light) {
+        :root {
+          --bg: #f7f8fa;
+          --text: #1f2328;
+          --muted: #57606a;
+          --accent: #3558c7;
+          --border: #d8dee4;
+          --card: #ffffff;
+        }
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        line-height: 1.6;
+        background: var(--bg);
+        color: var(--text);
+      }
+
+      main {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 2.5rem 1.25rem 4rem;
+      }
+
+      h1,
+      h2 {
+        line-height: 1.25;
+      }
+
+      h1 {
+        font-size: 2rem;
+        margin: 0 0 0.5rem;
+      }
+
+      .updated {
+        color: var(--muted);
+        margin: 0 0 2rem;
+      }
+
+      h2 {
+        font-size: 1.25rem;
+        margin: 2rem 0 0.75rem;
+        padding-top: 0.25rem;
+        border-top: 1px solid var(--border);
+      }
+
+      section:first-of-type h2 {
+        border-top: 0;
+        padding-top: 0;
+      }
+
+      p,
+      li {
+        margin: 0.75rem 0;
+      }
+
+      ul {
+        padding-left: 1.25rem;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        overflow: hidden;
+        margin: 1rem 0;
+      }
+
+      th,
+      td {
+        text-align: left;
+        vertical-align: top;
+        padding: 0.75rem 0.9rem;
+        border-bottom: 1px solid var(--border);
+      }
+
+      th {
+        width: 34%;
+        background: color-mix(in srgb, var(--card) 88%, var(--text) 12%);
+      }
+
+      tr:last-child td,
+      tr:last-child th {
+        border-bottom: 0;
+      }
+
+      a {
+        color: var(--accent);
+      }
+
+      code {
+        font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+        font-size: 0.95em;
+      }
+
+      .footer {
+        margin-top: 2rem;
+        padding-top: 1rem;
+        border-top: 1px solid var(--border);
+        color: var(--muted);
+        font-size: 0.95rem;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>ScrollHub Privacy Policy</h1>
+      <p class="updated"><strong>Last updated:</strong> May 29, 2026</p>
+
+      <p>
+        ScrollHub (“the app”) is a CBZ comic reader for Android and Windows,
+        published by the ScrollHub project. This policy explains what
+        information the app handles and how it is used.
+      </p>
+
+      <section>
+        <h2>Summary</h2>
+        <p>
+          ScrollHub is designed to read comics from files you choose. The app
+          does <strong>not</strong> require an account, does
+          <strong>not</strong> show ads, and does <strong>not</strong> include
+          analytics or crash-reporting SDKs that send your reading activity to
+          us.
+        </p>
+        <p>
+          Most data stays on your device. Network access is used only when
+          <strong>you</strong> choose to connect to a network library (SMB).
+        </p>
+      </section>
+
+      <section>
+        <h2>Information the app stores on your device</h2>
+        <p>
+          When you use ScrollHub, the app may store the following locally in
+          the app’s private data area:
+        </p>
+        <table>
+          <thead>
+            <tr>
+              <th>Data</th>
+              <th>Purpose</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th>Reading progress</th>
+              <td>Remembers the last page read for each comic</td>
+            </tr>
+            <tr>
+              <th>App settings</th>
+              <td>
+                Theme, reading mode, fit mode, reading direction, and similar
+                preferences
+              </td>
+            </tr>
+            <tr>
+              <th>Library location</th>
+              <td>The folder or network path you selected for your library</td>
+            </tr>
+            <tr>
+              <th>Last opened comic</th>
+              <td>Lets the app offer to resume where you left off</td>
+            </tr>
+            <tr>
+              <th>Network login details</th>
+              <td>
+                If you connect to an SMB/network share, the host, username, and
+                password you enter are saved in settings so you do not have to
+                re-enter them each time
+              </td>
+            </tr>
+            <tr>
+              <th>Downloaded comic cache</th>
+              <td>
+                Temporary copies of CBZ files being read (for example from a
+                network share or content URI) to improve performance
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <p>
+          You can clear this data by clearing the app’s storage in Android
+          system settings or by uninstalling the app.
+        </p>
+      </section>
+
+      <section>
+        <h2>Files and folders you choose</h2>
+        <p>
+          ScrollHub only accesses comic files and folders that
+          <strong>you</strong> pick through the app (for example via Android’s
+          document picker or a library folder on Windows). The app reads those
+          files to display comics and to remember your place.
+        </p>
+        <p>
+          On Android, if you grant access to a folder or file, the app may
+          request permission to keep that access across restarts so your library
+          and reading progress continue to work.
+        </p>
+        <p>
+          <strong
+            >We do not receive, upload, or store your comic files on our
+            servers.</strong
+          >
+        </p>
+      </section>
+
+      <section>
+        <h2>Network use</h2>
+        <p>
+          The app requests the <strong>Internet</strong> permission so it can
+          connect to network libraries when you configure SMB/network browsing.
+        </p>
+        <ul>
+          <li>Network connections are initiated by you.</li>
+          <li>
+            Comic data from network shares is downloaded to your device for
+            reading and may be cached locally.
+          </li>
+          <li>
+            The app does not send your comics, library contents, or reading
+            history to ScrollHub’s developers.
+          </li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Information we do not collect</h2>
+        <p>ScrollHub does <strong>not</strong> intentionally collect:</p>
+        <ul>
+          <li>Name, email address, or phone number</li>
+          <li>Precise location</li>
+          <li>Contacts, photos, or messages unrelated to comics you open</li>
+          <li>Advertising identifiers for tracking</li>
+          <li>Analytics about how you use the app</li>
+        </ul>
+        <p>We do not sell personal information.</p>
+      </section>
+
+      <section>
+        <h2>Third parties</h2>
+        <ul>
+          <li>
+            <strong>Google Play</strong> — If you install the app from Google
+            Play, Google’s own terms and privacy policy apply to your use of
+            the store and related services.
+          </li>
+          <li>
+            <strong>Your file and network providers</strong> — Comics may come
+            from your device storage, cloud storage apps you connect through
+            the system picker, or network shares you configure. Those providers
+            handle your data under their own policies.
+          </li>
+        </ul>
+        <p>
+          The app does not embed third-party advertising or analytics libraries.
+        </p>
+      </section>
+
+      <section>
+        <h2>Children’s privacy</h2>
+        <p>
+          ScrollHub is a general-purpose comic reader and is not directed at
+          children under 13. We do not knowingly collect personal information
+          from children.
+        </p>
+      </section>
+
+      <section>
+        <h2>Data security</h2>
+        <p>
+          Data processed by the app is stored on your device using the
+          operating system’s app sandbox. Network credentials you save are stored
+          in the app’s local settings file on your device. No method of storage
+          is 100% secure; keep your device and app install secure.
+        </p>
+      </section>
+
+      <section>
+        <h2>Changes to this policy</h2>
+        <p>
+          We may update this policy from time to time. The “Last updated” date
+          at the top will change when we do. Continued use of the app after an
+          update means you accept the revised policy.
+        </p>
+      </section>
+
+      <section>
+        <h2>Contact</h2>
+        <p>
+          Questions about this privacy policy can be submitted via GitHub Issues:
+        </p>
+        <p>
+          <a href="https://github.com/l2ound3d/ScrollHub/issues"
+            >https://github.com/l2ound3d/ScrollHub/issues</a
+          >
+        </p>
+      </section>
+
+      <div class="footer">
+        <p><strong>App name:</strong> ScrollHub</p>
+        <p><strong>Package name (Android):</strong> <code>com.sojii.scrollhub</code></p>
+      </div>
+    </main>
+  </body>
+</html>
