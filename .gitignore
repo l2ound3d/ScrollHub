@@ -25,3 +25,5 @@ dist-ssr
 
 # Android build outputs and signing keys
 src-tauri/target/android/
+src-tauri/gen/android/app/src/main/assets/
+release-assets/

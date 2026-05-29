@@ -1,14 +1,27 @@
 use crate::library::LibraryEntry;
 use tauri::AppHandle;
-use tauri_plugin_android_fs::{AndroidFsExt, Entry};
+use tauri_plugin_android_fs::{AndroidFsExt, Entry, PublicDir, PublicGeneralPurposeDir};
 
 use crate::path_resolver::file_uri;
 
+fn library_folder_initial_location(app: &AppHandle) -> Option<tauri_plugin_android_fs::FileUri> {
+    let api = app.android_fs();
+    api.public_storage()
+        .resolve_initial_location(
+            None,
+            PublicDir::GeneralPurpose(PublicGeneralPurposeDir::Documents),
+            "ScrollHub",
+            true,
+        )
+        .ok()
+}
+
 pub fn pick_folder(app: &AppHandle) -> Result<Option<String>, String> {
     let api = app.android_fs();
+    let initial_location = library_folder_initial_location(app);
     let selected = api
         .file_picker()
-        .pick_dir(None, false)
+        .pick_dir(initial_location.as_ref(), false)
         .map_err(|e| format!("Failed to open folder picker: {e}"))?;
 
     let Some(uri) = selected else {
@@ -36,6 +49,10 @@ pub fn pick_cbz(app: &AppHandle) -> Result<Option<String>, String> {
     let Some(uri) = selected else {
         return Ok(None);
     };
+
+    api.file_picker()
+        .persist_uri_permission(&uri)
+        .map_err(|e| format!("Failed to persist file access: {e}"))?;
 
     Ok(Some(uri.uri))
 }

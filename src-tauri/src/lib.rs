@@ -1,6 +1,8 @@
 mod cbz;
 #[cfg(target_os = "android")]
 mod android_library;
+#[cfg(target_os = "android")]
+mod android_uri;
 mod library;
 mod path_resolver;
 mod progress;

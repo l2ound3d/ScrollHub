@@ -1,0 +1,296 @@
+/* Windows desktop: hybrid UI — minimal reader chrome, richer library & settings */
+
+body[data-platform="desktop"] {
+  --surface-elevated: #1a1d24;
+  --surface-card: #1e2229;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --shadow-card: 0 2px 10px rgba(0, 0, 0, 0.22);
+  --shadow-card-hover: 0 6px 18px rgba(0, 0, 0, 0.32);
+}
+
+:root[data-theme="light"] body[data-platform="desktop"] {
+  --surface-elevated: #ffffff;
+  --surface-card: #ffffff;
+  --shadow-card: 0 2px 10px rgba(23, 32, 51, 0.08);
+  --shadow-card-hover: 0 6px 18px rgba(23, 32, 51, 0.12);
+}
+
+/* ---- Reader chrome (minimal) ---- */
+
+body[data-platform="desktop"] .chrome {
+  height: 42px;
+  padding: 0 0.65rem;
+  background: var(--panel);
+  border-bottom: 1px solid var(--panel-border);
+}
+
+body[data-platform="desktop"] .icon-btn {
+  min-width: 34px;
+  min-height: 34px;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  color: var(--text);
+}
+
+body[data-platform="desktop"] .icon-btn:hover {
+  background: rgba(110, 168, 254, 0.14);
+}
+
+body[data-platform="desktop"] .icon-btn:active {
+  background: rgba(110, 168, 254, 0.22);
+}
+
+body[data-platform="desktop"] .comic-title {
+  font-size: 0.88rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+body[data-platform="desktop"] .page-info-btn {
+  font-size: 0.78rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  background: rgba(110, 168, 254, 0.1);
+  color: var(--text);
+}
+
+body[data-platform="desktop"] .page-info-btn:hover {
+  background: rgba(110, 168, 254, 0.18);
+}
+
+body[data-platform="desktop"] .page-slider {
+  max-width: 280px;
+  height: 5px;
+  border-radius: 999px;
+}
+
+body[data-platform="desktop"] #fullscreen-btn.active,
+body[data-platform="desktop"] #open-library-btn.active {
+  background: rgba(110, 168, 254, 0.22);
+  color: var(--accent);
+}
+
+body[data-platform="desktop"].window-fullscreen .chrome {
+  background: rgba(22, 24, 29, 0.92);
+}
+
+:root[data-theme="light"] body[data-platform="desktop"].window-fullscreen .chrome {
+  background: rgba(255, 255, 255, 0.94);
+}
+
+/* ---- Drawer (richer) ---- */
+
+body[data-platform="desktop"] .drawer {
+  width: 260px;
+  background: rgba(22, 24, 29, 0.96);
+  backdrop-filter: blur(16px);
+  border-right: 1px solid var(--panel-border);
+  box-shadow: 8px 0 32px rgba(0, 0, 0, 0.35);
+}
+
+:root[data-theme="light"] body[data-platform="desktop"] .drawer {
+  background: rgba(255, 255, 255, 0.96);
+}
+
+body[data-platform="desktop"] .drawer-header {
+  font-size: 0.95rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--panel-border);
+  margin-bottom: 0.25rem;
+}
+
+body[data-platform="desktop"] .nav-btn {
+  text-align: left;
+  padding: 0.55rem 0.75rem;
+  border-radius: var(--radius-md);
+  font-size: 0.9rem;
+}
+
+body[data-platform="desktop"] .nav-btn.active {
+  background: rgba(110, 168, 254, 0.18);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* ---- Library (richer) ---- */
+
+body[data-platform="desktop"] #library-view {
+  padding: 1.5rem 2rem;
+  max-width: 920px;
+}
+
+body[data-platform="desktop"] .library-header h3,
+body[data-platform="desktop"] .panel-header h3 {
+  font-size: 1.35rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  margin-bottom: 0.35rem;
+}
+
+body[data-platform="desktop"] .library-breadcrumb {
+  font-size: 0.82rem;
+  margin-bottom: 0.5rem;
+}
+
+body[data-platform="desktop"] .library-setup-panel {
+  margin: 0 0 1.25rem;
+  max-width: 420px;
+}
+
+body[data-platform="desktop"] .library-source-tabs,
+body[data-platform="desktop"] .library-network-panel,
+body[data-platform="desktop"] .library-change-btn {
+  display: none !important;
+}
+
+body[data-platform="desktop"] .library-pick-btn {
+  width: 100%;
+  padding: 0.7rem 1.1rem;
+  border-radius: var(--radius-md);
+  border: none;
+  background: linear-gradient(180deg, var(--accent) 0%, var(--accent-strong) 100%);
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.9rem;
+  box-shadow: 0 2px 8px rgba(77, 136, 234, 0.35);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+body[data-platform="desktop"] .library-pick-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(77, 136, 234, 0.45);
+  background: linear-gradient(180deg, #7eb4ff 0%, var(--accent) 100%);
+}
+
+body[data-platform="desktop"] .library-list {
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 0.65rem;
+}
+
+body[data-platform="desktop"] .library-item {
+  background: var(--surface-card);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-md);
+  padding: 0.85rem 1rem;
+  box-shadow: var(--shadow-card);
+  transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+}
+
+body[data-platform="desktop"] .library-item:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-card-hover);
+  border-color: rgba(110, 168, 254, 0.35);
+}
+
+body[data-platform="desktop"] .library-item-title {
+  font-size: 0.92rem;
+}
+
+body[data-platform="desktop"] .library-item-meta {
+  background: rgba(110, 168, 254, 0.12);
+  color: var(--accent);
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+body[data-platform="desktop"] .inline-empty {
+  padding: 1.25rem;
+  background: var(--surface-card);
+  border-radius: var(--radius-md);
+  border: 1px dashed var(--panel-border);
+}
+
+/* ---- Settings (richer) ---- */
+
+body[data-platform="desktop"] #settings-view {
+  padding: 1.5rem 2rem;
+}
+
+body[data-platform="desktop"] .settings-form {
+  max-width: 480px;
+  padding: 1.35rem 1.5rem;
+  background: var(--surface-card);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  gap: 1.1rem;
+}
+
+body[data-platform="desktop"] .settings-form label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+body[data-platform="desktop"] .settings-form select,
+body[data-platform="desktop"] .settings-form input {
+  padding: 0.6rem 0.75rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--panel-border);
+  background: var(--bg);
+  font-size: 0.92rem;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--text);
+}
+
+body[data-platform="desktop"] .settings-form select:focus,
+body[data-platform="desktop"] .settings-form input:focus {
+  outline: 2px solid rgba(110, 168, 254, 0.45);
+  outline-offset: 1px;
+}
+
+body[data-platform="desktop"] .secondary-btn {
+  border: 1px solid var(--panel-border);
+  background: var(--surface-elevated);
+  border-radius: var(--radius-md);
+  padding: 0.55rem 0.85rem;
+}
+
+body[data-platform="desktop"] .secondary-btn:hover {
+  border-color: rgba(110, 168, 254, 0.4);
+  background: rgba(110, 168, 254, 0.08);
+}
+
+/* ---- Empty state (desktop) ---- */
+
+body[data-platform="desktop"] .empty-state {
+  gap: 0.35rem;
+}
+
+body[data-platform="desktop"] .empty-title {
+  font-size: 1.05rem;
+}
+
+body[data-platform="desktop"] .empty-sub {
+  font-size: 0.88rem;
+  max-width: 360px;
+  line-height: 1.45;
+}
+
+body[data-platform="desktop"].window-fullscreen .app-shell,
+body[data-platform="desktop"].window-fullscreen .content,
+body[data-platform="desktop"].window-fullscreen #reader-view {
+  height: 100vh;
+  min-height: 0;
+}
+
+body[data-platform="desktop"].window-fullscreen .content {
+  flex: 1;
+}
+
+.desktop-only {
+  display: none !important;
+}
+
+body[data-platform="desktop"] .desktop-only {
+  display: inline-flex !important;
+}

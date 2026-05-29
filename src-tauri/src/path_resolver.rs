@@ -5,6 +5,8 @@ use tauri::AppHandle;
 use tauri::Manager;
 
 #[cfg(target_os = "android")]
+use crate::android_uri::progress_storage_key;
+#[cfg(target_os = "android")]
 use tauri_plugin_android_fs::{AndroidFsExt, FileUri};
 
 use crate::smb_library::{self, SmbState};
@@ -61,6 +63,17 @@ fn is_content_uri(path: &str) -> bool {
 }
 
 fn cache_key(path: &str) -> String {
+    #[cfg(target_os = "android")]
+    {
+        if let Some(stable) = progress_storage_key(path).strip_prefix("content-doc:") {
+            use std::collections::hash_map::DefaultHasher;
+            use std::hash::{Hash, Hasher};
+            let mut hasher = DefaultHasher::new();
+            stable.hash(&mut hasher);
+            return format!("{:016x}", hasher.finish());
+        }
+    }
+
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
 

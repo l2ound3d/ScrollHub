@@ -1,3 +1,5 @@
+@import "./desktop.css";
+
 :root {
   color-scheme: dark;
   font-family: "Segoe UI", system-ui, sans-serif;
@@ -347,6 +349,46 @@ body.reading-active .page-container {
   display: flex;
 }
 
+body[data-reading-mode="double"] .page-container {
+  flex-wrap: nowrap;
+  align-items: stretch;
+  justify-content: center;
+  gap: 0;
+  padding: 0;
+}
+
+body.reading-active[data-reading-mode="double"] .page-container {
+  height: 100%;
+  min-height: 0;
+}
+
+body[data-reading-mode="double"] .page-image.fit-width,
+body[data-reading-mode="double"] .page-image.fit-height {
+  flex: 0 0 50%;
+  width: 50%;
+  max-width: 50%;
+  min-width: 0;
+  height: 100%;
+  max-height: 100%;
+  margin: 0;
+  padding: 0;
+  border-radius: 0;
+  object-fit: contain;
+}
+
+body[data-reading-mode="double"] .page-image:first-child:not(:only-child) {
+  object-position: right center;
+}
+
+body[data-reading-mode="double"] .page-image:last-child:not(:only-child) {
+  object-position: left center;
+}
+
+body.reading-active.chrome-hidden[data-reading-mode="double"] .page-image.fit-width,
+body.reading-active.chrome-hidden[data-reading-mode="double"] .page-image.fit-height {
+  max-height: 100%;
+}
+
 body.reading-active.chrome-hidden .page-container {
   padding: 0;
 }
@@ -364,11 +406,22 @@ body.reading-active.chrome-hidden .page-container {
 }
 
 .page-tap-zones {
-  position: absolute;
-  inset: 0;
-  z-index: 10;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  top: calc(var(--chrome-h) + var(--safe-top, 0px));
+  z-index: 11;
   display: grid;
-  grid-template-columns: min(22vw, 96px) 1fr min(22vw, 96px);
+  grid-template-columns: 14% 1fr 14%;
+  pointer-events: none;
+}
+
+body.reading-active.chrome-hidden .page-tap-zones {
+  top: var(--safe-top, 0px);
+}
+
+.page-tap-center {
   pointer-events: none;
 }
 
@@ -384,17 +437,20 @@ body.reading-active.chrome-hidden .page-container {
   padding: 0;
   cursor: default;
   -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 .mobile-top-tap-strip {
-  position: absolute;
+  position: fixed;
   top: 0;
   left: 0;
   right: 0;
-  height: calc(56px + env(safe-area-inset-top, 0px));
+  height: calc(var(--chrome-h) + var(--safe-top, 0px) + 8px);
   z-index: 12;
   background: transparent;
   -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  pointer-events: auto;
 }
 
 .mobile-top-tap-strip[hidden] {
@@ -405,8 +461,96 @@ body:not([data-platform="mobile"]) .mobile-top-tap-strip {
   display: none !important;
 }
 
+body:not([data-platform="mobile"]) .page-tap-zones {
+  display: none !important;
+}
+
+body[data-platform="mobile"] .page-container {
+  overflow: hidden;
+}
+
+body[data-platform="mobile"] .page-container.webtoon-mode {
+  overflow-y: auto;
+  overflow-x: hidden;
+  touch-action: pan-y;
+}
+
+body[data-platform="mobile"] .page-container:not(.webtoon-mode) {
+  position: relative;
+}
+
+body[data-platform="mobile"] .page-container:not(.webtoon-mode) .page-zoom-viewport {
+  position: absolute;
+  inset: 0;
+  flex: none;
+  touch-action: none;
+}
+
+body[data-platform="mobile"] .page-container:not(.webtoon-mode) .page-zoom-content {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  position: relative;
+}
+
+body[data-platform="mobile"] .page-zoom-viewport {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+body[data-platform="mobile"] .webtoon-page-slot .page-zoom-viewport.webtoon-slot-viewport {
+  position: relative;
+  width: 100%;
+  overflow: visible;
+  touch-action: pan-y;
+}
+
+body[data-platform="mobile"] .webtoon-page-slot.webtoon-slot-has-zoom .page-zoom-viewport.webtoon-slot-viewport {
+  overflow: hidden;
+  touch-action: pan-y;
+}
+
+body[data-platform="mobile"] .webtoon-page-slot .page-zoom-content {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  transform-origin: 0 0;
+}
+
+body[data-platform="mobile"] .page-container:not(.webtoon-mode) .page-zoom-viewport {
+  touch-action: none;
+}
+
+body[data-platform="mobile"][data-fit-mode="original"] .page-container:not(.webtoon-mode) .page-zoom-content {
+  max-width: none;
+  max-height: none;
+  width: max-content;
+  height: max-content;
+}
+
+body[data-platform="mobile"] .page-zoom-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  transform-origin: 0 0;
+}
+
+body[data-platform="mobile"] .page-zoom-content.mobile-zoom-active {
+  will-change: transform;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  transition: none !important;
+}
+
 body[data-platform="mobile"] .page-image {
-  touch-action: pinch-zoom;
+  pointer-events: none;
 }
 
 .page-image.fit-width {
@@ -437,30 +581,12 @@ body.reading-active.chrome-hidden .page-image.fit-height {
   max-height: none;
 }
 
-body[data-reading-mode="double"] .page-container {
-  flex-wrap: nowrap;
-  gap: 0;
-}
-
 body[data-direction="rtl"][data-reading-mode="double"] .page-container.rtl-spread-single {
   justify-content: flex-end;
 }
 
 body[data-direction="rtl"][data-reading-mode="single"] .page-container {
   justify-content: flex-end;
-}
-
-body[data-reading-mode="double"] .page-image.fit-width {
-  width: 50%;
-  max-width: 50%;
-  flex: 0 0 50%;
-  margin: 0;
-  padding: 0;
-}
-
-body[data-reading-mode="double"] .page-image.fit-height {
-  max-width: 50%;
-  flex: 0 0 50%;
 }
 
 /* Webtoon scroll mode */
@@ -650,6 +776,18 @@ body.network-loading::after {
   max-width: none;
 }
 
+.library-phone-hint {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.library-phone-hint strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
 .library-item {
   display: flex;
   justify-content: space-between;
@@ -707,18 +845,20 @@ body.network-loading::after {
   .comic-title {
     max-width: 120px;
   }
-
-  body[data-reading-mode="double"]:not([data-platform="mobile"]) .page-image.fit-width {
-    width: 100%;
-  }
 }
 
 @media (orientation: landscape) {
-  body[data-platform="mobile"][data-reading-mode="double"] .page-container {
+  body[data-platform="mobile"][data-reading-mode="double"] .page-container,
+  body[data-platform="mobile"][data-reading-mode="double"] .page-zoom-content {
     align-items: stretch;
     justify-content: center;
     gap: 0;
     padding: 0;
+  }
+
+  body[data-platform="mobile"]:not([data-reading-mode="double"]) .page-container:not(.webtoon-mode) .page-zoom-viewport {
+    align-items: center;
+    justify-content: center;
   }
 
   body[data-platform="mobile"][data-reading-mode="double"] .page-image.fit-width,
@@ -746,7 +886,8 @@ body.network-loading::after {
   }
 }
 
-body[data-platform="mobile"][data-reading-mode="double"] .page-container {
+body[data-platform="mobile"][data-reading-mode="double"] .page-container,
+body[data-platform="mobile"][data-reading-mode="double"] .page-zoom-content {
   gap: 0;
 }
 
@@ -782,5 +923,88 @@ body[data-platform="mobile"] .icon-btn {
 }
 
 body[data-platform="mobile"] .page-slider {
-  min-width: 80px;
+  min-width: 0;
+}
+
+body[data-platform="mobile"].reading-active .comic-title {
+  display: none;
+}
+
+body[data-platform="mobile"].reading-active .chrome-left {
+  flex: 1;
+  min-width: 0;
+}
+
+body[data-platform="mobile"].reading-active .chrome-meta {
+  flex: 1;
+  min-width: 0;
+  gap: 0.45rem;
+}
+
+body[data-platform="mobile"].reading-active .page-info-wrap {
+  flex-shrink: 0;
+}
+
+body[data-platform="mobile"].reading-active .page-slider:not([hidden]) {
+  flex: 1;
+  min-width: 3rem;
+  max-width: 100%;
+}
+
+body[data-platform="mobile"].reading-active.chrome-hidden .mobile-top-tap-strip {
+  z-index: 25;
+}
+
+.open-comic-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.open-comic-sheet[hidden] {
+  display: none;
+}
+
+.open-comic-backdrop {
+  position: absolute;
+  inset: 0;
+  border: none;
+  background: rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+}
+
+.open-comic-panel {
+  position: relative;
+  width: min(100%, 420px);
+  margin: 0 0.75rem calc(0.75rem + var(--safe-bottom, 0px));
+  padding: 1rem;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  display: grid;
+  gap: 0.55rem;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+}
+
+.open-comic-title {
+  margin: 0 0 0.25rem;
+  font-size: 1rem;
+  font-weight: 650;
+}
+
+.open-comic-option {
+  width: 100%;
+  text-align: center;
+  font-weight: 600;
+}
+
+.open-comic-cancel {
+  width: 100%;
+  text-align: center;
+  color: var(--muted);
+  border-color: transparent;
+  background: transparent;
 }
