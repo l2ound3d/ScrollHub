@@ -20,6 +20,18 @@ pub struct AppSettings {
     pub network_password: Option<String>,
     #[serde(default)]
     pub last_read_path: Option<String>,
+    #[serde(default = "default_reader_percent")]
+    pub reader_brightness: u32,
+    #[serde(default = "default_reader_percent")]
+    pub reader_contrast: u32,
+    #[serde(default)]
+    pub reader_tint_color: Option<String>,
+    #[serde(default)]
+    pub reader_tint_opacity: f32,
+}
+
+fn default_reader_percent() -> u32 {
+    100
 }
 
 impl Default for AppSettings {
@@ -35,6 +47,10 @@ impl Default for AppSettings {
             network_username: None,
             network_password: None,
             last_read_path: None,
+            reader_brightness: 100,
+            reader_contrast: 100,
+            reader_tint_color: None,
+            reader_tint_opacity: 0.0,
         }
     }
 }

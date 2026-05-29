@@ -27,6 +27,10 @@ export interface AppSettings {
   networkUsername: string | null;
   networkPassword: string | null;
   lastReadPath: string | null;
+  readerBrightness?: number;
+  readerContrast?: number;
+  readerTintColor?: string | null;
+  readerTintOpacity?: number;
 }
 
 export type View = "reader" | "library" | "settings";

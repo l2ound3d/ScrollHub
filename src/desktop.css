@@ -60,9 +60,93 @@ body[data-platform="desktop"] .page-info-btn:hover {
 }
 
 body[data-platform="desktop"] .page-slider {
-  max-width: 280px;
+  max-width: 220px;
   height: 5px;
   border-radius: 999px;
+}
+
+body[data-platform="desktop"] .reader-image-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+body[data-platform="desktop"] .reader-image-controls[hidden] {
+  display: none !important;
+}
+
+body[data-platform="desktop"] .reader-adjust {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+body[data-platform="desktop"] .reader-adjust-icon-btn {
+  border: none;
+  background: transparent;
+  padding: 0.1rem 0.15rem;
+  font-size: 0.72rem;
+  line-height: 1;
+  color: var(--muted);
+  flex-shrink: 0;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+body[data-platform="desktop"] .reader-adjust-icon-btn:hover {
+  color: var(--text);
+  background: rgba(110, 168, 254, 0.14);
+}
+
+body[data-platform="desktop"] .reader-adjust-slider {
+  width: 58px;
+  height: 4px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+body[data-platform="desktop"] .tint-color-btn {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--panel-border);
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+body[data-platform="desktop"] .tint-color-btn:hover {
+  border-color: rgba(110, 168, 254, 0.55);
+}
+
+body[data-platform="desktop"] .tint-color-btn.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(110, 168, 254, 0.25);
+}
+
+body[data-platform="desktop"] .tint-color-swatch {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #ffd699;
+}
+
+body[data-platform="desktop"] .tint-color-input {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+body[data-platform="desktop"] .page-container .page-image {
+  filter: var(--reader-image-filter, brightness(1) contrast(1));
 }
 
 body[data-platform="desktop"] #fullscreen-btn.active,

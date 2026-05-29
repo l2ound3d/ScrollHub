@@ -35,6 +35,58 @@
               hidden
               aria-label="Jump to page"
             />
+            <div id="reader-image-controls" class="reader-image-controls desktop-only" hidden>
+              <button
+                id="tint-color-btn"
+                class="tint-color-btn"
+                type="button"
+                title="Color tint (double-click to reset)"
+                aria-label="Color tint"
+              >
+                <span id="tint-color-swatch" class="tint-color-swatch"></span>
+              </button>
+              <input id="tint-color-input" class="tint-color-input" type="color" value="#ffd699" tabindex="-1" aria-hidden="true" />
+              <div class="reader-adjust">
+                <button
+                  id="brightness-reset-btn"
+                  class="reader-adjust-icon-btn"
+                  type="button"
+                  title="Reset brightness"
+                  aria-label="Reset brightness"
+                >
+                  ☀
+                </button>
+                <input
+                  id="brightness-slider"
+                  class="reader-adjust-slider"
+                  type="range"
+                  min="25"
+                  max="200"
+                  value="100"
+                  aria-label="Brightness"
+                />
+              </div>
+              <div class="reader-adjust">
+                <button
+                  id="contrast-reset-btn"
+                  class="reader-adjust-icon-btn"
+                  type="button"
+                  title="Reset contrast"
+                  aria-label="Reset contrast"
+                >
+                  ◐
+                </button>
+                <input
+                  id="contrast-slider"
+                  class="reader-adjust-slider"
+                  type="range"
+                  min="25"
+                  max="200"
+                  value="100"
+                  aria-label="Contrast"
+                />
+              </div>
+            </div>
           </div>
         </div>
         <div class="chrome-actions">
@@ -57,7 +109,7 @@
           <button id="library-nav-btn" class="nav-btn" data-view="library" type="button">Library</button>
           <button class="nav-btn" data-view="settings" type="button">Settings</button>
         </nav>
-        <p id="drawer-hint" class="drawer-hint">ScrollHub v0.1.4</p>
+        <p id="drawer-hint" class="drawer-hint">ScrollHub v0.1.5</p>
       </aside>
 
       <main class="content">

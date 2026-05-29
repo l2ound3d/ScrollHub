@@ -52,6 +52,10 @@ let settings: AppSettings = {
   networkUsername: null,
   networkPassword: null,
   lastReadPath: null,
+  readerBrightness: 100,
+  readerContrast: 100,
+  readerTintColor: null,
+  readerTintOpacity: 0,
 };
 
 let libraryNavStack: { name: string; path: string }[] = [];
@@ -101,6 +105,14 @@ const els = {
   networkConnectBtn: document.getElementById("network-connect-btn") as HTMLButtonElement,
   libraryChangeBtn: document.getElementById("library-change-btn") as HTMLButtonElement,
   pageSlider: document.getElementById("page-slider") as HTMLInputElement,
+  readerImageControls: document.getElementById("reader-image-controls")!,
+  brightnessResetBtn: document.getElementById("brightness-reset-btn") as HTMLButtonElement,
+  brightnessSlider: document.getElementById("brightness-slider") as HTMLInputElement,
+  contrastResetBtn: document.getElementById("contrast-reset-btn") as HTMLButtonElement,
+  contrastSlider: document.getElementById("contrast-slider") as HTMLInputElement,
+  tintColorBtn: document.getElementById("tint-color-btn") as HTMLButtonElement,
+  tintColorSwatch: document.getElementById("tint-color-swatch")!,
+  tintColorInput: document.getElementById("tint-color-input") as HTMLInputElement,
   settingsForm: document.getElementById("settings-form") as HTMLFormElement,
   themeSelect: document.getElementById("theme-select") as HTMLSelectElement,
   directionSelect: document.getElementById("direction-select") as HTMLSelectElement,
@@ -341,8 +353,156 @@ function showAppMessage(message: string) {
   window.alert(message);
 }
 
+const READER_DEFAULT_BRIGHTNESS = 100;
+const READER_DEFAULT_CONTRAST = 100;
+
 function isDesktopApp(): boolean {
   return !isMobile && !usesAndroidStorage();
+}
+
+function getReaderBrightness(): number {
+  return settings.readerBrightness ?? 100;
+}
+
+function getReaderContrast(): number {
+  return settings.readerContrast ?? 100;
+}
+
+function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+  const normalized = hex.replace("#", "").trim();
+  if (!/^[0-9a-fA-F]{6}$/.test(normalized)) return null;
+  return {
+    r: Number.parseInt(normalized.slice(0, 2), 16),
+    g: Number.parseInt(normalized.slice(2, 4), 16),
+    b: Number.parseInt(normalized.slice(4, 6), 16),
+  };
+}
+
+function syncReaderImageControlUi() {
+  if (!isDesktopApp()) return;
+  els.brightnessSlider.value = String(getReaderBrightness());
+  els.contrastSlider.value = String(getReaderContrast());
+  const color = settings.readerTintColor ?? "#ffd699";
+  const opacity = settings.readerTintOpacity ?? 0;
+  els.tintColorInput.value = color;
+  els.tintColorSwatch.style.backgroundColor = color;
+  els.tintColorBtn.classList.toggle("active", opacity > 0);
+  els.tintColorSwatch.style.opacity = opacity > 0 ? "1" : "0.45";
+}
+
+function computeColorTintFilter(hex: string, strength: number): string {
+  const rgb = hexToRgb(hex);
+  if (!rgb || strength <= 0) return "";
+
+  const r = rgb.r / 255;
+  const g = rgb.g / 255;
+  const b = rgb.b / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  let h = 0;
+  let s = 0;
+  const l = (max + min) / 2;
+
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) * 60;
+    else if (max === g) h = ((b - r) / d + 2) * 60;
+    else h = ((r - g) / d + 4) * 60;
+  }
+
+  const sepia = Math.min(100, strength * 100);
+  const hueRotate = Math.round(h - 38);
+  const saturate = Math.round(100 + s * 150 * strength);
+  const brightness = Math.round(100 + (l - 0.5) * 80 * strength);
+
+  return `sepia(${sepia}%) hue-rotate(${hueRotate}deg) saturate(${saturate}%) brightness(${brightness}%)`;
+}
+
+function buildReaderImageFilter(): string {
+  const parts = [
+    `brightness(${getReaderBrightness() / 100})`,
+    `contrast(${getReaderContrast() / 100})`,
+  ];
+  const opacity = settings.readerTintOpacity ?? 0;
+  const color = settings.readerTintColor;
+  if (color && opacity > 0) {
+    const tint = computeColorTintFilter(color, opacity);
+    if (tint) parts.push(tint);
+  }
+  return parts.join(" ");
+}
+
+function applyReaderImageFilters() {
+  if (!isDesktopApp()) return;
+  document.documentElement.style.setProperty("--reader-image-filter", buildReaderImageFilter());
+  syncReaderImageControlUi();
+}
+
+function resetReaderBrightness() {
+  settings.readerBrightness = READER_DEFAULT_BRIGHTNESS;
+  applyReaderImageFilters();
+  void saveSettings(settings);
+}
+
+function resetReaderContrast() {
+  settings.readerContrast = READER_DEFAULT_CONTRAST;
+  applyReaderImageFilters();
+  void saveSettings(settings);
+}
+
+function resetReaderTint() {
+  settings.readerTintColor = null;
+  settings.readerTintOpacity = 0;
+  applyReaderImageFilters();
+  void saveSettings(settings);
+}
+
+function bindReaderImageControls() {
+  if (!isDesktopApp()) return;
+
+  els.brightnessResetBtn.addEventListener("click", () => {
+    resetReaderBrightness();
+  });
+
+  els.brightnessSlider.addEventListener("input", () => {
+    settings.readerBrightness = Number(els.brightnessSlider.value);
+    applyReaderImageFilters();
+  });
+  els.brightnessSlider.addEventListener("change", () => {
+    void saveSettings(settings);
+  });
+
+  els.contrastResetBtn.addEventListener("click", () => {
+    resetReaderContrast();
+  });
+
+  els.contrastSlider.addEventListener("input", () => {
+    settings.readerContrast = Number(els.contrastSlider.value);
+    applyReaderImageFilters();
+  });
+  els.contrastSlider.addEventListener("change", () => {
+    void saveSettings(settings);
+  });
+
+  els.tintColorBtn.addEventListener("click", () => {
+    els.tintColorInput.click();
+  });
+  els.tintColorBtn.addEventListener("dblclick", (event) => {
+    event.preventDefault();
+    resetReaderTint();
+  });
+
+  els.tintColorInput.addEventListener("input", () => {
+    settings.readerTintColor = els.tintColorInput.value;
+    if ((settings.readerTintOpacity ?? 0) <= 0) {
+      settings.readerTintOpacity = 0.35;
+    }
+    applyReaderImageFilters();
+  });
+  els.tintColorInput.addEventListener("change", () => {
+    void saveSettings(settings);
+  });
 }
 
 function getDesktopWindow() {
@@ -418,7 +578,7 @@ function applyMobileUi() {
 
   const drawerHint = document.getElementById("drawer-hint");
   if (drawerHint) {
-    drawerHint.textContent = "ScrollHub v0.1.4-android";
+    drawerHint.textContent = "ScrollHub v0.1.5-android";
   }
 
   const emptySub = document.querySelector(".empty-sub");
@@ -2132,6 +2292,7 @@ function updatePageInfo() {
     els.pageInfoWrap.hidden = true;
     els.comicTitle.textContent = "ScrollHub";
     els.pageSlider.hidden = true;
+    if (isDesktopApp()) els.readerImageControls.hidden = true;
     return;
   }
 
@@ -2143,6 +2304,10 @@ function updatePageInfo() {
   els.pageSlider.min = "0";
   els.pageSlider.max = String(Math.max(0, state.comic.pageCount - 1));
   els.pageSlider.value = String(state.currentPage);
+
+  if (isDesktopApp()) {
+    els.readerImageControls.hidden = false;
+  }
 }
 
 function resetWebtoonState() {
@@ -3013,6 +3178,10 @@ async function applySettingsFromForm() {
     networkUsername: settings.networkUsername,
     networkPassword: settings.networkPassword,
     lastReadPath: settings.lastReadPath,
+    readerBrightness: settings.readerBrightness ?? 100,
+    readerContrast: settings.readerContrast ?? 100,
+    readerTintColor: settings.readerTintColor ?? null,
+    readerTintOpacity: settings.readerTintOpacity ?? 0,
   };
   applyTheme();
   applyReadingMode();
@@ -3151,6 +3320,8 @@ function bindEvents() {
       void renderReader();
     }
   });
+
+  bindReaderImageControls();
 
   els.settingsForm.addEventListener("change", () => {
     void applySettingsFromForm();
@@ -3295,6 +3466,9 @@ export async function initApp() {
   if (!["single", "double", "webtoon"].includes(settings.readingMode)) {
     settings.readingMode = "single";
   }
+  settings.readerBrightness = settings.readerBrightness ?? 100;
+  settings.readerContrast = settings.readerContrast ?? 100;
+  settings.readerTintOpacity = settings.readerTintOpacity ?? 0;
   normalizeDesktopLibrarySettings();
   els.themeSelect.value = settings.theme;
   els.directionSelect.value = settings.readingDirection;
@@ -3315,6 +3489,7 @@ export async function initApp() {
 
   applyTheme();
   applyReadingMode();
+  applyReaderImageFilters();
   bindEvents();
   updatePageInfo();
 
